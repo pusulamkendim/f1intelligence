@@ -21,6 +21,11 @@ class Settings(BaseSettings):
         default="F1Intelligence/0.1 (development)",
         min_length=8,
     )
+    source_user_agent: str = Field(
+        default="F1Intelligence/0.1 (development)",
+        min_length=8,
+    )
+    fia_press_release_feed_url: str = "https://www.fia.com/rss/press-release"
 
     @property
     def cors_origin_list(self) -> list[str]:

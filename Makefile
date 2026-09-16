@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -15,6 +15,13 @@ infra-down:
 
 seed-demo:
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/002_seed_demo_story.sql
+
+ingestion-setup:
+	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/003_official_ingestion.sql
+	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/004_seed_fia_ingestion_story.sql
+
+ingest-fia: ingestion-setup
+	cd apps/api && uv run python -m app.ingestion.run_fia --limit 50
 
 api-dev:
 	cd apps/api && uv run fastapi dev app/main.py --port 8000

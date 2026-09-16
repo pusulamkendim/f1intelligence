@@ -5,10 +5,35 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.story import EvidenceItem, StoryDetail
+from app.schemas.story import EvidenceItem, StoryDetail, StorySummary
 
 router = APIRouter(prefix="/api/v1/stories", tags=["stories"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+@router.get("", response_model=list[StorySummary])
+async def list_stories(db: DbSession) -> list[StorySummary]:
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                s.id,
+                s.slug,
+                s.title,
+                s.summary,
+                s.status,
+                s.updated_at,
+                COUNT(e.id)::int AS evidence_count,
+                MAX(COALESCE(e.published_at, e.captured_at)) AS latest_evidence_at
+            FROM stories s
+            LEFT JOIN evidence e ON e.story_id = s.id
+            GROUP BY s.id
+            ORDER BY s.updated_at DESC, s.title ASC
+            """
+        )
+    )
+
+    return [StorySummary(**dict(row)) for row in result.mappings().all()]
 
 
 @router.get("/{slug}", response_model=StoryDetail)

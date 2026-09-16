@@ -118,6 +118,42 @@ export type RaceDetail = RaceSummary & {
   documents: RaceDocumentSummary[];
 };
 
+export type IngestionEntity = {
+  id: string;
+  entity_type: string;
+  slug: string;
+  display_name: string;
+  matched_alias: string;
+  confidence: number;
+};
+
+export type IngestionQueueItem = {
+  id: string;
+  source_key: string;
+  source_name: string;
+  source_type: string;
+  external_id: string;
+  source_url?: string | null;
+  title: string;
+  published_at?: string | null;
+  status: string;
+  match_score?: number | null;
+  ingested_at: string;
+  matched_story_slug?: string | null;
+  matched_story_title?: string | null;
+  entities: IngestionEntity[];
+};
+
+export type IngestionQueue = {
+  counts: {
+    attached: number;
+    unmatched: number;
+    ambiguous: number;
+    filtered: number;
+  };
+  items: IngestionQueueItem[];
+};
+
 async function fetchJson<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetch(`${apiBaseUrl}${path}`, { cache: "no-store" });
@@ -163,4 +199,9 @@ export function getRaces(): Promise<RaceSummary[]> {
 
 export function getRace(slug: string): Promise<RaceDetail | null> {
   return fetchJson<RaceDetail | null>(`/api/v1/races/${encodeURIComponent(slug)}`, null);
+}
+
+export function getIngestionQueue(status?: string): Promise<IngestionQueue | null> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fetchJson<IngestionQueue | null>(`/api/v1/internal/ingestion/queue${query}`, null);
 }

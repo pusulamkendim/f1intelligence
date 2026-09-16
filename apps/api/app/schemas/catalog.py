@@ -48,6 +48,17 @@ class RaceSummary(BaseModel):
     story_count: int
 
 
+class RaceDocumentSummary(BaseModel):
+    id: UUID
+    document_number: int | None = None
+    title: str
+    document_type: str
+    document_url: str
+    published_at: datetime | None = None
+    recalled: bool
+
+
 class RaceDetail(RaceSummary):
     synthesis: str | None = None
     stories: list[StorySummary]
+    documents: list[RaceDocumentSummary]

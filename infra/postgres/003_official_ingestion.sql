@@ -29,6 +29,16 @@ CREATE TABLE IF NOT EXISTS story_match_terms (
     UNIQUE (story_id, term)
 );
 
+CREATE TABLE IF NOT EXISTS story_identifiers (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    identifier_type text NOT NULL,
+    value text NOT NULL,
+    enabled boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (story_id, identifier_type, value)
+);
+
 CREATE TABLE IF NOT EXISTS ingestion_items (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id uuid NOT NULL REFERENCES ingestion_sources(id) ON DELETE CASCADE,
@@ -46,6 +56,8 @@ CREATE TABLE IF NOT EXISTS ingestion_items (
 );
 
 CREATE INDEX IF NOT EXISTS story_match_terms_story_idx ON story_match_terms(story_id);
+CREATE INDEX IF NOT EXISTS story_identifiers_story_idx ON story_identifiers(story_id);
+CREATE INDEX IF NOT EXISTS story_identifiers_value_idx ON story_identifiers(value);
 CREATE INDEX IF NOT EXISTS ingestion_items_status_idx ON ingestion_items(status);
 CREATE INDEX IF NOT EXISTS ingestion_items_story_idx ON ingestion_items(matched_story_id);
 CREATE INDEX IF NOT EXISTS ingestion_items_published_idx ON ingestion_items(published_at DESC);

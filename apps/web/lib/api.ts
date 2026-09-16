@@ -60,50 +60,96 @@ export type StoryDetail = {
   evidence: StoryEvidence[];
 };
 
+export type TeamSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  active_season?: number | null;
+  driver_count: number;
+  story_count: number;
+};
+
+export type TeamMember = {
+  id: string;
+  slug: string;
+  display_name: string;
+  role: string;
+  season: number;
+  car_number?: number | null;
+};
+
+export type TeamDetail = {
+  id: string;
+  slug: string;
+  name: string;
+  active_season?: number | null;
+  members: TeamMember[];
+  stories: StorySummary[];
+};
+
+export type RaceSummary = {
+  id: string;
+  season: number;
+  round?: number | null;
+  slug: string;
+  official_name: string;
+  circuit?: string | null;
+  country?: string | null;
+  start_at?: string | null;
+  weekend_start_date?: string | null;
+  weekend_end_date?: string | null;
+  status: string;
+  story_count: number;
+};
+
+export type RaceDetail = RaceSummary & {
+  synthesis?: string | null;
+  stories: StorySummary[];
+};
+
+async function fetchJson<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const response = await fetch(`${apiBaseUrl}${path}`, { cache: "no-store" });
+    if (!response.ok) return fallback;
+    return (await response.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getApiHealth(): Promise<ApiHealth | null> {
   try {
     const response = await fetch(`${apiBaseUrl}/health`, {
       next: { revalidate: 30 },
     });
 
-    if (!response.ok) {
-      return null;
-    }
-
+    if (!response.ok) return null;
     return (await response.json()) as ApiHealth;
   } catch {
     return null;
   }
 }
 
-export async function getStories(): Promise<StorySummary[]> {
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/stories`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return [];
-    }
-
-    return (await response.json()) as StorySummary[];
-  } catch {
-    return [];
-  }
+export function getStories(): Promise<StorySummary[]> {
+  return fetchJson<StorySummary[]>("/api/v1/stories", []);
 }
 
-export async function getStory(slug: string): Promise<StoryDetail | null> {
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/stories/${encodeURIComponent(slug)}`, {
-      cache: "no-store",
-    });
+export function getStory(slug: string): Promise<StoryDetail | null> {
+  return fetchJson<StoryDetail | null>(`/api/v1/stories/${encodeURIComponent(slug)}`, null);
+}
 
-    if (!response.ok) {
-      return null;
-    }
+export function getTeams(): Promise<TeamSummary[]> {
+  return fetchJson<TeamSummary[]>("/api/v1/teams", []);
+}
 
-    return (await response.json()) as StoryDetail;
-  } catch {
-    return null;
-  }
+export function getTeam(slug: string): Promise<TeamDetail | null> {
+  return fetchJson<TeamDetail | null>(`/api/v1/teams/${encodeURIComponent(slug)}`, null);
+}
+
+export function getRaces(): Promise<RaceSummary[]> {
+  return fetchJson<RaceSummary[]>("/api/v1/races", []);
+}
+
+export function getRace(slug: string): Promise<RaceDetail | null> {
+  return fetchJson<RaceDetail | null>(`/api/v1/races/${encodeURIComponent(slug)}`, null);
 }

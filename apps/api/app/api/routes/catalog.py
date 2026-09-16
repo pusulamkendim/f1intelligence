@@ -5,7 +5,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.catalog import RaceDetail, RaceSummary, TeamDetail, TeamMember, TeamSummary
+from app.schemas.catalog import (
+    RaceDetail,
+    RaceDocumentSummary,
+    RaceSummary,
+    TeamDetail,
+    TeamMember,
+    TeamSummary,
+)
 from app.schemas.story import StorySummary
 
 router = APIRouter(tags=["catalog"])
@@ -183,6 +190,27 @@ async def get_race(slug: str, db: DbSession) -> RaceDetail:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Race not found")
 
     stories = await _linked_stories(db, race["entity_id"]) if race["entity_id"] else []
+    document_result = await db.execute(
+        text(
+            """
+            SELECT
+                id,
+                document_number,
+                title,
+                document_type,
+                document_url,
+                published_at,
+                recalled
+            FROM race_documents
+            WHERE race_id = :race_id
+            ORDER BY published_at DESC NULLS LAST, document_number DESC NULLS LAST
+            LIMIT 100
+            """
+        ),
+        {"race_id": race["id"]},
+    )
+    documents = [RaceDocumentSummary(**dict(row)) for row in document_result.mappings().all()]
+
     return RaceDetail(
         id=race["id"],
         season=race["season"],
@@ -198,4 +226,5 @@ async def get_race(slug: str, db: DbSession) -> RaceDetail:
         story_count=race["story_count"],
         synthesis=race["synthesis"],
         stories=stories,
+        documents=documents,
     )

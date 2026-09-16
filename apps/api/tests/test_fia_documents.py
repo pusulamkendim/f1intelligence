@@ -8,22 +8,31 @@ HTML = """
     <h3>Austrian Grand Prix</h3>
     <ul>
       <li>
-        <a href="/sites/default/files/doc-14.pdf">Doc 14 - Car Presentation Submissions</a>
+        <a href="/sites/default/files/doc-14.pdf">
+          Doc 14 - Car Presentation Submissions
+        </a>
         <span>Published on 26.06.26 11:00 CEST</span>
       </li>
       <li>
-        <a href="/sites/default/files/doc-40.pdf">Doc 40 - Parts and Parameters been replaced and or changed during Parc Fermé</a>
+        <a href="/sites/default/files/doc-40.pdf">
+          Doc 40 - Parts and Parameters been replaced and or changed during Parc Fermé
+        </a>
         <span>Published on 28.06.26 13:51 CEST</span>
       </li>
       <li>
-        <a href="/sites/default/files/doc-45.pdf">Doc 45 - Decision - Car 23 - Alleged yellow flag infringement</a>
+        <a href="/sites/default/files/doc-45.pdf">
+          Doc 45 - Decision - Car 23 - Alleged yellow flag infringement
+        </a>
         <span>Published on 28.06.26 17:00 CEST</span>
       </li>
     </ul>
   </section>
   <section>
     <h3>Spanish Grand Prix</h3>
-    <a href="/sites/default/files/doc-67.pdf">Doc 67 - Infringement - Car 55 - Causing a Collision with Car 14 Published on 13.09.26 16:13 CEST</a>
+    <a href="/sites/default/files/doc-67.pdf">
+      Doc 67 - Infringement - Car 55 - Causing a Collision with Car 14
+      Published on 13.09.26 16:13 CEST
+    </a>
   </section>
 </body></html>
 """
@@ -61,7 +70,8 @@ def test_document_classifier_keeps_high_signal_types_distinct() -> None:
 
 def test_parser_ignores_unknown_event_sections() -> None:
     documents = parse_fia_decision_documents(
-        "<h3>WEC</h3><a href='/wec.pdf'>Doc 1 - Entry List</a> Published on 01.01.26 10:00 CET",
+        "<h3>WEC</h3><a href='/wec.pdf'>Doc 1 - Entry List</a> "
+        "Published on 01.01.26 10:00 CET",
         base_url="https://www.fia.com/",
         known_event_names={"Austrian Grand Prix"},
     )

@@ -24,6 +24,8 @@ export default async function RacePage({ params }: { params: Promise<{ slug: str
   const race = await getRace(slug);
   if (!race) notFound();
 
+  const recentDocuments = race.documents.slice(0, 16);
+
   return (
     <main className={styles.page}>
       <section className={`shell ${styles.hero}`}>
@@ -68,6 +70,32 @@ export default async function RacePage({ params }: { params: Promise<{ slug: str
               </ul>
             ) : (
               <p>No Story objects are linked to this race yet.</p>
+            )}
+          </section>
+
+          <section className={styles.panel}>
+            <p className="sectionLabel">OFFICIAL DOCUMENTS</p>
+            <h2>Latest FIA event documents</h2>
+            {recentDocuments.length > 0 ? (
+              <ul className={styles.storyList}>
+                {recentDocuments.map((document) => (
+                  <li className={styles.story} key={document.id}>
+                    <p className={styles.storyTitle}>
+                      <a href={document.document_url} target="_blank" rel="noreferrer">
+                        {document.document_number ? `Doc ${document.document_number} · ` : ""}
+                        {document.title} ↗
+                      </a>
+                    </p>
+                    <p className={styles.storyMeta}>
+                      {titleCase(document.document_type)}
+                      {document.published_at ? ` · ${formatDate(document.published_at)}` : ""}
+                      {document.recalled ? " · Recalled" : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No FIA event documents have been ingested for this race yet.</p>
             )}
           </section>
         </div>

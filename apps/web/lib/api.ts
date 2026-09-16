@@ -102,9 +102,20 @@ export type RaceSummary = {
   story_count: number;
 };
 
+export type RaceDocumentSummary = {
+  id: string;
+  document_number?: number | null;
+  title: string;
+  document_type: string;
+  document_url: string;
+  published_at?: string | null;
+  recalled: boolean;
+};
+
 export type RaceDetail = RaceSummary & {
   synthesis?: string | null;
   stories: StorySummary[];
+  documents: RaceDocumentSummary[];
 };
 
 async function fetchJson<T>(path: string, fallback: T): Promise<T> {

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     source_http_retries: int = Field(default=3, ge=1, le=10)
     source_http_retry_backoff_seconds: float = Field(default=2.0, ge=0)
     fia_press_release_feed_url: str = "https://www.fia.com/rss/press-release"
+    fia_documents_season_url: str = (
+        "https://www.fia.com/documents/championships/"
+        "fia-formula-one-world-championship-14/season/season-2026-2072"
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -24,7 +24,7 @@ ingest-fia: ingestion-setup
 	cd apps/api && uv run python -m app.ingestion.run_fia --limit 50
 
 api-dev:
-	cd apps/api && uv run fastapi dev app/main.py --port 8000
+	cd apps/api && uv run uvicorn app.main:app --reload --port 8000
 
 api-test:
 	cd apps/api && uv run pytest

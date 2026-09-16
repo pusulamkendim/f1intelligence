@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getApiHealth } from "@/lib/api";
 
 const pillars = [
@@ -47,11 +49,14 @@ export default async function Home() {
       </section>
 
       <section className="shell nextStep">
-        <p className="eyebrow">NEXT VERTICAL SLICE</p>
-        <h2>Story Page → real API data → evidence timeline.</h2>
+        <p className="eyebrow">FIRST WORKING VERTICAL SLICE</p>
+        <h2>Story Page → API data → evidence timeline.</h2>
         <p>
-          The repository is intentionally starting with the canonical Story model before expanding into a generic news feed.
+          The demo fixture is deliberately synthetic. It validates the canonical Story model before real ingestion sources are connected.
         </p>
+        <Link className="storyCta" href="/stories/demo-rear-stability">
+          Open demo Story Page →
+        </Link>
       </section>
     </main>
   );

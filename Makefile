@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -12,6 +12,9 @@ infra-up:
 
 infra-down:
 	docker compose --env-file .env down
+
+seed-demo:
+	docker compose --env-file .env exec -T postgres sh -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/002_seed_demo_story.sql
 
 api-dev:
 	cd apps/api && uv run fastapi dev app/main.py --port 8000

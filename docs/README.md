@@ -11,6 +11,7 @@ This directory is the living product and strategy knowledge base for the project
 5. [`05_SEO_MONETIZATION_GROWTH.md`](05_SEO_MONETIZATION_GROWTH.md) — traffic model, content portfolio, monetization logic and growth KPIs.
 6. [`06_IMPLEMENTATION_ROADMAP.md`](06_IMPLEMENTATION_ROADMAP.md) — staged MVP delivery plan and decision gates.
 7. [`07_UI_SPECIFICATION.md`](07_UI_SPECIFICATION.md) — implementation-ready P0 screen structure, shared components, mobile behavior, interaction rules and acceptance criteria.
+8. [`08_LOFI_WIREFRAMES.md`](08_LOFI_WIREFRAMES.md) — low-fidelity wireframes for the five critical MVP flows, responsive behavior, component inventory and prototype acceptance criteria.
 
 ## Documentation rules
 

@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.ingestion.entity_matcher import EntityAlias, EntityMention, match_entities, normalize_entity_text
+from app.ingestion.entity_matcher import (
+    EntityAlias,
+    EntityMention,
+    match_entities,
+    normalize_entity_text,
+)
 from app.ingestion.fia_documents import FiaDecisionDocument, parse_fia_decision_documents
 
 PROVIDER = "fia"

@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
 from uuid import UUID
 from xml.etree import ElementTree
+
+REFERENCE_PATTERNS = (
+    re.compile(r"\bICA-\d{4}(?:-\d{2}){1,}\b", re.IGNORECASE),
+)
+F1_MARKERS = (
+    re.compile(r"\bformula\s+one\b", re.IGNORECASE),
+    re.compile(r"\bformula\s*1\b", re.IGNORECASE),
+    re.compile(r"\bf1\b", re.IGNORECASE),
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +39,7 @@ class StoryRule:
     slug: str
     min_score: int
     terms: tuple[MatchTerm, ...]
+    identifiers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,12 +101,56 @@ def parse_fia_rss(xml_text: str) -> list[FeedItem]:
     return items
 
 
+def extract_reference_ids(text: str) -> tuple[str, ...]:
+    identifiers: set[str] = set()
+    for pattern in REFERENCE_PATTERNS:
+        identifiers.update(match.group(0).upper() for match in pattern.finditer(text))
+    return tuple(sorted(identifiers))
+
+
+def item_reference_ids(item: FeedItem) -> tuple[str, ...]:
+    searchable = " ".join((item.title, *item.categories))
+    return extract_reference_ids(searchable)
+
+
+def is_f1_relevant(item: FeedItem) -> bool:
+    searchable = " ".join((item.title, *item.categories))
+    return any(pattern.search(searchable) for pattern in F1_MARKERS)
+
+
 def score_item(item: FeedItem, rule: StoryRule) -> int:
     searchable = " ".join((item.title, *item.categories)).casefold()
     return sum(term.weight for term in rule.terms if term.term.casefold() in searchable)
 
 
+def _identifier_matches(item: FeedItem, rules: list[StoryRule]) -> list[StoryRule]:
+    item_ids = set(item_reference_ids(item))
+    if not item_ids:
+        return []
+
+    return [
+        rule
+        for rule in rules
+        if item_ids.intersection(identifier.upper() for identifier in rule.identifiers)
+    ]
+
+
 def choose_story(item: FeedItem, rules: list[StoryRule]) -> StoryMatch:
+    identifier_matches = _identifier_matches(item, rules)
+    if len(identifier_matches) == 1:
+        rule = identifier_matches[0]
+        return StoryMatch(
+            story_id=rule.story_id,
+            story_slug=rule.slug,
+            score=100,
+            status="matched",
+        )
+    if len(identifier_matches) > 1:
+        return StoryMatch(story_id=None, story_slug=None, score=100, status="ambiguous")
+
+    if not is_f1_relevant(item):
+        return StoryMatch(story_id=None, story_slug=None, score=0, status="filtered")
+
     eligible: list[tuple[int, StoryRule]] = []
 
     for rule in rules:

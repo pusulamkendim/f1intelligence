@@ -25,6 +25,7 @@ class IngestionStats:
     fetched: int = 0
     attached: int = 0
     unmatched: int = 0
+    filtered: int = 0
     ambiguous: int = 0
     duplicates: int = 0
 
@@ -126,9 +127,25 @@ async def load_rules(session: AsyncSession) -> list[StoryRule]:
                 "slug": row["slug"],
                 "min_score": row["min_score"],
                 "terms": [],
+                "identifiers": [],
             },
         )
         item["terms"].append(MatchTerm(term=row["term"], weight=row["weight"]))
+
+    identifiers = await session.execute(
+        text(
+            """
+            SELECT story_id, value
+            FROM story_identifiers
+            WHERE enabled = true
+            ORDER BY story_id, value
+            """
+        )
+    )
+    for row in identifiers.mappings().all():
+        story_id = row["story_id"]
+        if story_id in grouped:
+            grouped[story_id]["identifiers"].append(row["value"])
 
     return [
         StoryRule(
@@ -136,16 +153,21 @@ async def load_rules(session: AsyncSession) -> list[StoryRule]:
             slug=value["slug"],
             min_score=value["min_score"],
             terms=tuple(value["terms"]),
+            identifiers=tuple(value["identifiers"]),
         )
         for value in grouped.values()
     ]
 
 
-async def already_ingested(session: AsyncSession, source_id: Any, external_id: str) -> bool:
+async def existing_ingestion_status(
+    session: AsyncSession,
+    source_id: Any,
+    external_id: str,
+) -> str | None:
     result = await session.execute(
         text(
             """
-            SELECT 1
+            SELECT status
             FROM ingestion_items
             WHERE source_id = :source_id
               AND external_id = :external_id
@@ -153,7 +175,7 @@ async def already_ingested(session: AsyncSession, source_id: Any, external_id: s
         ),
         {"source_id": source_id, "external_id": external_id},
     )
-    return result.first() is not None
+    return result.scalar_one_or_none()
 
 
 async def attach_evidence(
@@ -238,6 +260,16 @@ async def attach_evidence(
                 :match_score,
                 CAST(:raw_metadata AS jsonb)
             )
+            ON CONFLICT (source_id, external_id) DO UPDATE
+            SET source_url = EXCLUDED.source_url,
+                title = EXCLUDED.title,
+                published_at = EXCLUDED.published_at,
+                matched_story_id = EXCLUDED.matched_story_id,
+                evidence_id = EXCLUDED.evidence_id,
+                status = EXCLUDED.status,
+                match_score = EXCLUDED.match_score,
+                raw_metadata = EXCLUDED.raw_metadata,
+                ingested_at = now()
             """
         ),
         {
@@ -290,6 +322,16 @@ async def record_nonmatch(
                 :match_score,
                 CAST(:raw_metadata AS jsonb)
             )
+            ON CONFLICT (source_id, external_id) DO UPDATE
+            SET source_url = EXCLUDED.source_url,
+                title = EXCLUDED.title,
+                published_at = EXCLUDED.published_at,
+                matched_story_id = NULL,
+                evidence_id = NULL,
+                status = EXCLUDED.status,
+                match_score = EXCLUDED.match_score,
+                raw_metadata = EXCLUDED.raw_metadata,
+                ingested_at = now()
             """
         ),
         {
@@ -315,7 +357,12 @@ async def ingest(limit: int) -> IngestionStats:
             rules = await load_rules(session)
 
             for item in items:
-                if await already_ingested(session, source_id, item.external_id):
+                existing_status = await existing_ingestion_status(
+                    session,
+                    source_id,
+                    item.external_id,
+                )
+                if existing_status == "attached":
                     stats.duplicates += 1
                     continue
 
@@ -327,6 +374,8 @@ async def ingest(limit: int) -> IngestionStats:
                     await record_nonmatch(session, source_id, item, match.status, match.score)
                     if match.status == "ambiguous":
                         stats.ambiguous += 1
+                    elif match.status == "filtered":
+                        stats.filtered += 1
                     else:
                         stats.unmatched += 1
 

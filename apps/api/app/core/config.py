@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
-    database_url: str = "postgresql+asyncpg://f1:f1@localhost:5432/f1intelligence"
+    database_url: str = "postgresql+asyncpg://f1:f1@localhost:5433/f1intelligence"
     redis_url: str = "redis://localhost:6379/0"
     cors_origins: str = "http://localhost:3000"
     media_storage_backend: str = "local"

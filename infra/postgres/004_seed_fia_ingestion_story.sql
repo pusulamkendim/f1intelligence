@@ -51,3 +51,10 @@ WHERE s.slug = 'fia-2026-sporting-decisions'
 ON CONFLICT (story_id, term) DO UPDATE
 SET weight = EXCLUDED.weight,
     enabled = true;
+
+INSERT INTO story_identifiers (story_id, identifier_type, value, enabled)
+SELECT id, 'fia_ica_case', 'ICA-2026-06-07-08-09', true
+FROM stories
+WHERE slug = 'fia-2026-sporting-decisions'
+ON CONFLICT (story_id, identifier_type, value) DO UPDATE
+SET enabled = true;

@@ -21,6 +21,17 @@ class EvidenceItem(BaseModel):
     metadata: dict[str, Any]
 
 
+class StoryEntity(BaseModel):
+    id: UUID
+    entity_type: str
+    slug: str
+    display_name: str
+    relation_type: str
+    confidence: int
+    match_method: str
+    matched_alias: str | None = None
+
+
 class StorySummary(BaseModel):
     id: UUID
     slug: str
@@ -45,4 +56,5 @@ class StoryDetail(BaseModel):
     what_to_watch_next: str | None = None
     created_at: datetime
     updated_at: datetime
+    entities: list[StoryEntity]
     evidence: list[EvidenceItem]

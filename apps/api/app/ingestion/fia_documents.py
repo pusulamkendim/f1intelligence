@@ -9,7 +9,10 @@ from urllib.parse import urljoin
 
 from app.ingestion.entity_matcher import normalize_entity_text
 
-_DOC_RE = re.compile(r"^(?P<recalled>Recalled\s*-\s*)?Doc\s+(?P<number>\d+)\s*-\s*(?P<title>.+)$", re.I)
+_DOC_RE = re.compile(
+    r"^(?P<recalled>Recalled\s*-\s*)?Doc\s+(?P<number>\d+)\s*-\s*(?P<title>.+)$",
+    re.I,
+)
 _PUBLISHED_RE = re.compile(
     r"Published\s+on\s+(?P<date>\d{2}\.\d{2}\.\d{2})\s+"
     r"(?P<time>\d{2}:\d{2})\s+(?P<zone>CET|CEST)",
@@ -116,8 +119,9 @@ class _DecisionDocumentParser(HTMLParser):
         if self.pending is not None:
             self.pending_tail.append(stripped)
             joined = " ".join(self.pending_tail)
-            if _PUBLISHED_RE.search(joined):
-                self.pending["published_label"] = _PUBLISHED_RE.search(joined).group(0)  # type: ignore[union-attr]
+            published_match = _PUBLISHED_RE.search(joined)
+            if published_match:
+                self.pending["published_label"] = published_match.group(0)
                 self.pending["published_at"] = _parse_published(joined)
                 self._finalize_pending()
 
@@ -133,7 +137,10 @@ class _DecisionDocumentParser(HTMLParser):
         text_value = " ".join(" ".join(self.anchor_parts).split())
         published_match = _PUBLISHED_RE.search(text_value)
         published_label = published_match.group(0) if published_match else None
-        title_text = text_value[: published_match.start()].strip() if published_match else text_value
+        if published_match:
+            title_text = text_value[: published_match.start()].strip()
+        else:
+            title_text = text_value
         doc_match = _DOC_RE.match(title_text)
         if not doc_match:
             return
@@ -163,6 +170,12 @@ class _DecisionDocumentParser(HTMLParser):
         document_number = int(self.pending["document_number"])
         title = str(self.pending["title"])
         document_url = str(self.pending["document_url"])
+        published_value = self.pending["published_at"]
+        published_at = published_value if isinstance(published_value, datetime) else None
+        published_label_value = self.pending["published_label"]
+        published_label = (
+            str(published_label_value) if published_label_value is not None else None
+        )
         external_id = sha256(
             f"{event_name}|{document_number}|{document_url}".encode()
         ).hexdigest()
@@ -174,12 +187,8 @@ class _DecisionDocumentParser(HTMLParser):
                 title=title,
                 document_type=str(self.pending["document_type"]),
                 document_url=document_url,
-                published_at=self.pending["published_at"]  # type: ignore[arg-type]
-                if isinstance(self.pending["published_at"], datetime)
-                else None,
-                published_label=str(self.pending["published_label"])
-                if self.pending["published_label"]
-                else None,
+                published_at=published_at,
+                published_label=published_label,
                 recalled=bool(self.pending["recalled"]),
                 external_id=external_id,
             )

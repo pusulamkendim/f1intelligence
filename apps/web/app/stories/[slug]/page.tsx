@@ -91,12 +91,14 @@ export default async function StoryPage({ params }: { params: Promise<{ slug: st
   }
 
   const isSynthetic = story.evidence.some((item) => item.metadata.is_synthetic === true);
+  const timelineTitle = story.evidence.length > 1 ? "How the story changed" : "Evidence record";
+  const evidenceLabel = `${story.evidence.length} evidence ${story.evidence.length === 1 ? "item" : "items"}`;
 
   return (
     <main className="storyPage">
       <section className="shell storyHero">
-        <Link className="backLink" href="/">
-          ← Home
+        <Link className="backLink" href="/stories">
+          ← Stories
         </Link>
 
         {isSynthetic && (
@@ -133,9 +135,9 @@ export default async function StoryPage({ params }: { params: Promise<{ slug: st
             <div className="sectionHeading">
               <div>
                 <p className="sectionLabel">EVIDENCE TIMELINE</p>
-                <h2>How the story changed</h2>
+                <h2>{timelineTitle}</h2>
               </div>
-              <span>{story.evidence.length} evidence items</span>
+              <span>{evidenceLabel}</span>
             </div>
 
             <div className="evidenceTimeline">
@@ -155,20 +157,6 @@ export default async function StoryPage({ params }: { params: Promise<{ slug: st
               <p>{story.why_it_matters}</p>
             </section>
           )}
-
-          <section className="asidePanel metadataPanel">
-            <p className="sectionLabel">EDITORIAL STATE</p>
-            <dl>
-              <div>
-                <dt>Status</dt>
-                <dd>{titleCase(story.status)}</dd>
-              </div>
-              <div>
-                <dt>Evidence items</dt>
-                <dd>{story.evidence.length}</dd>
-              </div>
-            </dl>
-          </section>
 
           {story.what_to_watch_next && (
             <section className="asidePanel watchNextPanel">

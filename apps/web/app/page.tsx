@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getApiHealth } from "@/lib/api";
+import { getApiHealth, getStories } from "@/lib/api";
 
 const pillars = [
   {
@@ -21,7 +21,8 @@ const pillars = [
 ];
 
 export default async function Home() {
-  const health = await getApiHealth();
+  const [health, stories] = await Promise.all([getApiHealth(), getStories()]);
+  const latestStory = stories[0];
 
   return (
     <main>
@@ -49,14 +50,26 @@ export default async function Home() {
       </section>
 
       <section className="shell nextStep">
-        <p className="eyebrow">FIRST WORKING VERTICAL SLICE</p>
-        <h2>Story Page → API data → evidence timeline.</h2>
-        <p>
-          The demo fixture is deliberately synthetic. It validates the canonical Story model before real ingestion sources are connected.
-        </p>
-        <Link className="storyCta" href="/stories/demo-rear-stability">
-          Open demo Story Page →
-        </Link>
+        <p className="eyebrow">CURRENT STORY</p>
+        {latestStory ? (
+          <>
+            <h2>{latestStory.title}</h2>
+            <p>{latestStory.summary ?? "Follow the evidence and updates attached to this story."}</p>
+            <Link className="storyCta" href={`/stories/${latestStory.slug}`}>
+              Follow current story →
+            </Link>
+          </>
+        ) : (
+          <>
+            <h2>Story Page → API data → evidence timeline.</h2>
+            <p>
+              Start the API and ingestion pipeline to populate the site with persistent F1 stories backed by source evidence.
+            </p>
+            <Link className="storyCta" href="/stories">
+              Browse stories →
+            </Link>
+          </>
+        )}
       </section>
     </main>
   );

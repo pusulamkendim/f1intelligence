@@ -39,6 +39,44 @@ class FakeSession:
         return FakeResult(rows)
 
 
+def test_list_stories_returns_public_story_summaries() -> None:
+    now = datetime(2026, 9, 16, 18, 0, tzinfo=UTC)
+    story_id = uuid4()
+    fake_session = FakeSession(
+        [
+            [
+                {
+                    "id": story_id,
+                    "slug": "fia-2026-sporting-decisions",
+                    "title": "2026 FIA Formula One sporting and regulatory decisions",
+                    "summary": "Official FIA decisions and regulatory developments.",
+                    "status": "monitoring",
+                    "updated_at": now,
+                    "evidence_count": 2,
+                    "latest_evidence_at": now,
+                }
+            ]
+        ]
+    )
+
+    async def override_db() -> AsyncIterator[FakeSession]:
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/api/v1/stories")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["slug"] == "fia-2026-sporting-decisions"
+    assert payload[0]["evidence_count"] == 2
+    assert "confidence" not in payload[0]
+    assert "significance" not in payload[0]
+
+
 def test_get_story_returns_story_and_evidence() -> None:
     now = datetime(2026, 9, 16, 18, 0, tzinfo=UTC)
     story_id = uuid4()

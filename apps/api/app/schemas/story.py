@@ -21,6 +21,17 @@ class EvidenceItem(BaseModel):
     metadata: dict[str, Any]
 
 
+class StorySummary(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+    summary: str | None = None
+    status: str
+    updated_at: datetime
+    evidence_count: int
+    latest_evidence_at: datetime | None = None
+
+
 class StoryDetail(BaseModel):
     id: UUID
     slug: str

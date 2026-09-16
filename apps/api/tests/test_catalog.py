@@ -94,7 +94,7 @@ def test_get_team_returns_members_and_linked_stories() -> None:
                     "display_name": "Lando Norris",
                     "role": "driver",
                     "season": 2026,
-                    "car_number": None,
+                    "car_number": 1,
                 },
                 {
                     "id": uuid4(),
@@ -128,6 +128,7 @@ def test_get_team_returns_members_and_linked_stories() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["name"] == "McLaren"
+    assert payload["members"][0]["car_number"] == 1
     assert [member["role"] for member in payload["members"]] == ["driver", "team_principal"]
     assert payload["stories"][0]["slug"] == "fia-2026-sporting-decisions"
 
@@ -165,7 +166,7 @@ def test_list_races_returns_calendar_order_data() -> None:
     assert payload["weekend_start_date"] == "2026-09-24"
 
 
-def test_get_race_returns_linked_stories() -> None:
+def test_get_race_returns_linked_stories_and_documents() -> None:
     now = datetime(2026, 9, 17, 0, 0, tzinfo=UTC)
     entity_id = uuid4()
     fake_session = FakeSession(
@@ -200,6 +201,17 @@ def test_get_race_returns_linked_stories() -> None:
                     "latest_evidence_at": now,
                 }
             ],
+            [
+                {
+                    "id": uuid4(),
+                    "document_number": 10,
+                    "title": "Car Presentation Submissions",
+                    "document_type": "car_presentation",
+                    "document_url": "https://www.fia.com/example.pdf",
+                    "published_at": now,
+                    "recalled": False,
+                }
+            ],
         ]
     )
     app.dependency_overrides[get_db] = override_with(fake_session)
@@ -212,6 +224,7 @@ def test_get_race_returns_linked_stories() -> None:
     payload = response.json()
     assert payload["circuit"] == "Monza"
     assert payload["stories"][0]["slug"] == "monza-example"
+    assert payload["documents"][0]["document_type"] == "car_presentation"
 
 
 def test_catalog_detail_routes_return_404_for_missing_items() -> None:

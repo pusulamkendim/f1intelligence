@@ -93,3 +93,17 @@ def test_matcher_prefers_more_specific_alias_for_same_entity() -> None:
 
     match = match_entities("Oracle Red Bull Racing update", aliases, season=2026)[0]
     assert match.matched_alias == "Oracle Red Bull Racing"
+
+
+def test_matcher_maps_fia_car_number_without_matching_bare_document_numbers() -> None:
+    sainz = alias("Carlos Sainz", "Car 55", confidence=99)
+
+    match = match_entities(
+        "Doc 67 - Infringement - Car 55 - Causing a Collision with Car 14",
+        [sainz],
+        season=2026,
+    )[0]
+    assert match.slug == "carlos-sainz"
+    assert match.matched_alias == "Car 55"
+
+    assert match_entities("Doc 55 - Final Starting Grid", [sainz], season=2026) == ()

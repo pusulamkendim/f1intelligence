@@ -10,6 +10,7 @@ This directory is the living product and strategy knowledge base for the project
 4. [`04_CONTENT_PIPELINE.md`](04_CONTENT_PIPELINE.md) — source ingestion, clustering, analysis, editorial review and publishing workflow.
 5. [`05_SEO_MONETIZATION_GROWTH.md`](05_SEO_MONETIZATION_GROWTH.md) — traffic model, content portfolio, monetization logic and growth KPIs.
 6. [`06_IMPLEMENTATION_ROADMAP.md`](06_IMPLEMENTATION_ROADMAP.md) — staged MVP delivery plan and decision gates.
+7. [`07_UI_SPECIFICATION.md`](07_UI_SPECIFICATION.md) — implementation-ready P0 screen structure, shared components, mobile behavior, interaction rules and acceptance criteria.
 
 ## Documentation rules
 

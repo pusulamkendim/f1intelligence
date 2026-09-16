@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.ingestion.entity_matcher import EntityAlias, EntityMention, match_entities
 from app.ingestion.fia_rss import MatchTerm, StoryRule, choose_story, parse_fia_rss
 
 SOURCE_KEY = "fia_press_release_rss"
@@ -28,6 +30,7 @@ class IngestionStats:
     filtered: int = 0
     ambiguous: int = 0
     duplicates: int = 0
+    entity_mentions: int = 0
 
 
 async def fetch_items(limit: int) -> list:
@@ -159,15 +162,40 @@ async def load_rules(session: AsyncSession) -> list[StoryRule]:
     ]
 
 
-async def existing_ingestion_status(
-    session: AsyncSession,
-    source_id: Any,
-    external_id: str,
-) -> str | None:
+async def load_entity_aliases(session: AsyncSession) -> list[EntityAlias]:
     result = await session.execute(
         text(
             """
-            SELECT status
+            SELECT
+                a.entity_id,
+                e.entity_type,
+                e.slug,
+                e.display_name,
+                a.alias,
+                a.alias_type,
+                a.confidence,
+                a.valid_from_season,
+                a.valid_to_season
+            FROM entity_aliases a
+            JOIN entities e ON e.id = a.entity_id
+            WHERE a.enabled = true
+            ORDER BY e.entity_type, e.slug, length(a.alias) DESC
+            """
+        )
+    )
+
+    return [EntityAlias(**dict(row)) for row in result.mappings().all()]
+
+
+async def existing_ingestion_item(
+    session: AsyncSession,
+    source_id: Any,
+    external_id: str,
+) -> dict[str, Any] | None:
+    result = await session.execute(
+        text(
+            """
+            SELECT id, status, matched_story_id
             FROM ingestion_items
             WHERE source_id = :source_id
               AND external_id = :external_id
@@ -175,7 +203,8 @@ async def existing_ingestion_status(
         ),
         {"source_id": source_id, "external_id": external_id},
     )
-    return result.scalar_one_or_none()
+    row = result.mappings().first()
+    return dict(row) if row is not None else None
 
 
 async def attach_evidence(
@@ -183,7 +212,7 @@ async def attach_evidence(
     source_id: Any,
     item: Any,
     match: Any,
-) -> None:
+) -> Any:
     raw_metadata = json.dumps(
         {
             "origin": SOURCE_KEY,
@@ -233,7 +262,7 @@ async def attach_evidence(
     )
     evidence_id = evidence_result.scalar_one()
 
-    await session.execute(
+    ingestion_result = await session.execute(
         text(
             """
             INSERT INTO ingestion_items (
@@ -270,6 +299,7 @@ async def attach_evidence(
                 match_score = EXCLUDED.match_score,
                 raw_metadata = EXCLUDED.raw_metadata,
                 ingested_at = now()
+            RETURNING id
             """
         ),
         {
@@ -284,11 +314,13 @@ async def attach_evidence(
             "raw_metadata": raw_metadata,
         },
     )
+    ingestion_item_id = ingestion_result.scalar_one()
 
     await session.execute(
         text("UPDATE stories SET updated_at = now() WHERE id = :story_id"),
         {"story_id": match.story_id},
     )
+    return ingestion_item_id
 
 
 async def record_nonmatch(
@@ -297,9 +329,9 @@ async def record_nonmatch(
     item: Any,
     status: str,
     score: int,
-) -> None:
+) -> Any:
     raw_metadata = json.dumps({"categories": list(item.categories), "origin": SOURCE_KEY})
-    await session.execute(
+    result = await session.execute(
         text(
             """
             INSERT INTO ingestion_items (
@@ -332,6 +364,7 @@ async def record_nonmatch(
                 match_score = EXCLUDED.match_score,
                 raw_metadata = EXCLUDED.raw_metadata,
                 ingested_at = now()
+            RETURNING id
             """
         ),
         {
@@ -345,6 +378,90 @@ async def record_nonmatch(
             "raw_metadata": raw_metadata,
         },
     )
+    return result.scalar_one()
+
+
+async def persist_entity_mentions(
+    session: AsyncSession,
+    ingestion_item_id: Any,
+    story_id: Any | None,
+    mentions: tuple[EntityMention, ...],
+) -> None:
+    await session.execute(
+        text("DELETE FROM ingestion_item_entities WHERE ingestion_item_id = :item_id"),
+        {"item_id": ingestion_item_id},
+    )
+
+    for mention in mentions:
+        await session.execute(
+            text(
+                """
+                INSERT INTO ingestion_item_entities (
+                    ingestion_item_id,
+                    entity_id,
+                    matched_alias,
+                    confidence,
+                    match_method
+                )
+                VALUES (:item_id, :entity_id, :matched_alias, :confidence, :match_method)
+                ON CONFLICT (ingestion_item_id, entity_id) DO UPDATE
+                SET matched_alias = EXCLUDED.matched_alias,
+                    confidence = EXCLUDED.confidence,
+                    match_method = EXCLUDED.match_method,
+                    updated_at = now()
+                """
+            ),
+            {
+                "item_id": ingestion_item_id,
+                "entity_id": mention.entity_id,
+                "matched_alias": mention.matched_alias,
+                "confidence": mention.confidence,
+                "match_method": mention.match_method,
+            },
+        )
+
+        if story_id is not None:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO story_entities (
+                        story_id,
+                        entity_id,
+                        relation_type,
+                        confidence,
+                        match_method,
+                        matched_alias
+                    )
+                    VALUES (
+                        :story_id,
+                        :entity_id,
+                        'mentioned',
+                        :confidence,
+                        :match_method,
+                        :matched_alias
+                    )
+                    ON CONFLICT (story_id, entity_id) DO UPDATE
+                    SET confidence = GREATEST(story_entities.confidence, EXCLUDED.confidence),
+                        matched_alias = CASE
+                            WHEN EXCLUDED.confidence >= story_entities.confidence
+                            THEN EXCLUDED.matched_alias
+                            ELSE story_entities.matched_alias
+                        END,
+                        updated_at = now()
+                    """
+                ),
+                {
+                    "story_id": story_id,
+                    "entity_id": mention.entity_id,
+                    "confidence": mention.confidence,
+                    "match_method": mention.match_method,
+                    "matched_alias": mention.matched_alias,
+                },
+            )
+
+
+def item_entity_text(item: Any) -> str:
+    return " ".join((item.title, *item.categories))
 
 
 async def ingest(limit: int) -> IngestionStats:
@@ -355,23 +472,51 @@ async def ingest(limit: int) -> IngestionStats:
         async with session.begin():
             source_id = await ensure_source(session)
             rules = await load_rules(session)
+            entity_aliases = await load_entity_aliases(session)
 
             for item in items:
-                existing_status = await existing_ingestion_status(
-                    session,
-                    source_id,
-                    item.external_id,
+                existing = await existing_ingestion_item(session, source_id, item.external_id)
+                match = choose_story(item, rules)
+
+                should_extract_entities = match.status != "filtered" or (
+                    existing is not None and existing["status"] == "attached"
                 )
-                if existing_status == "attached":
+                season = item.published_at.year if item.published_at else datetime.now(UTC).year
+                mentions = (
+                    match_entities(item_entity_text(item), entity_aliases, season=season)
+                    if should_extract_entities
+                    else ()
+                )
+                stats.entity_mentions += len(mentions)
+
+                if existing is not None and existing["status"] == "attached":
+                    await persist_entity_mentions(
+                        session,
+                        existing["id"],
+                        existing["matched_story_id"],
+                        mentions,
+                    )
                     stats.duplicates += 1
                     continue
 
-                match = choose_story(item, rules)
                 if match.status == "matched":
-                    await attach_evidence(session, source_id, item, match)
+                    ingestion_item_id = await attach_evidence(session, source_id, item, match)
+                    await persist_entity_mentions(
+                        session,
+                        ingestion_item_id,
+                        match.story_id,
+                        mentions,
+                    )
                     stats.attached += 1
                 else:
-                    await record_nonmatch(session, source_id, item, match.status, match.score)
+                    ingestion_item_id = await record_nonmatch(
+                        session,
+                        source_id,
+                        item,
+                        match.status,
+                        match.score,
+                    )
+                    await persist_entity_mentions(session, ingestion_item_id, None, mentions)
                     if match.status == "ambiguous":
                         stats.ambiguous += 1
                     elif match.status == "filtered":

@@ -16,6 +16,17 @@ export type StorySummary = {
   latest_evidence_at?: string | null;
 };
 
+export type StoryEntity = {
+  id: string;
+  entity_type: string;
+  slug: string;
+  display_name: string;
+  relation_type: string;
+  confidence: number;
+  match_method: string;
+  matched_alias?: string | null;
+};
+
 export type StoryEvidence = {
   id: string;
   presentation_type: string;
@@ -45,6 +56,7 @@ export type StoryDetail = {
   what_to_watch_next?: string | null;
   created_at: string;
   updated_at: string;
+  entities: StoryEntity[];
   evidence: StoryEvidence[];
 };
 

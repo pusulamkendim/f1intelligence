@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.story import EvidenceItem, StoryDetail, StorySummary
+from app.schemas.story import EvidenceItem, StoryDetail, StoryEntity, StorySummary
 
 router = APIRouter(prefix="/api/v1/stories", tags=["stories"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -68,6 +68,35 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
             detail="Story not found",
         )
 
+    entity_result = await db.execute(
+        text(
+            """
+            SELECT
+                e.id,
+                e.entity_type,
+                e.slug,
+                e.display_name,
+                se.relation_type,
+                se.confidence,
+                se.match_method,
+                se.matched_alias
+            FROM story_entities se
+            JOIN entities e ON e.id = se.entity_id
+            WHERE se.story_id = :story_id
+            ORDER BY
+                CASE e.entity_type
+                    WHEN 'race' THEN 1
+                    WHEN 'team' THEN 2
+                    WHEN 'person' THEN 3
+                    ELSE 4
+                END,
+                e.display_name ASC
+            """
+        ),
+        {"story_id": story["id"]},
+    )
+    entity_items = [StoryEntity(**dict(row)) for row in entity_result.mappings().all()]
+
     evidence_result = await db.execute(
         text(
             """
@@ -115,5 +144,6 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
 
     return StoryDetail(
         **dict(story),
+        entities=entity_items,
         evidence=evidence_items,
     )

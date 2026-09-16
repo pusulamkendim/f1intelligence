@@ -5,6 +5,17 @@ export type ApiHealth = {
   database?: string;
 };
 
+export type StorySummary = {
+  id: string;
+  slug: string;
+  title: string;
+  summary?: string | null;
+  status: string;
+  updated_at: string;
+  evidence_count: number;
+  latest_evidence_at?: string | null;
+};
+
 export type StoryEvidence = {
   id: string;
   presentation_type: string;
@@ -50,6 +61,22 @@ export async function getApiHealth(): Promise<ApiHealth | null> {
     return (await response.json()) as ApiHealth;
   } catch {
     return null;
+  }
+}
+
+export async function getStories(): Promise<StorySummary[]> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/stories`, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return (await response.json()) as StorySummary[];
+  } catch {
+    return [];
   }
 }
 

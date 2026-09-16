@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia ingest-fia-docs api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -23,9 +23,13 @@ ingestion-setup:
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/006_seed_2026_entity_registry.sql
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/007_ingestion_entity_links.sql
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/008_seed_2026_driver_numbers.sql
+	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/009_fia_event_documents.sql
 
 ingest-fia: ingestion-setup
 	cd apps/api && uv run python -m app.ingestion.run_fia --limit 50
+
+ingest-fia-docs: ingestion-setup
+	cd apps/api && uv run python -m app.ingestion.run_fia_documents --season 2026
 
 api-dev:
 	cd apps/api && uv run uvicorn app.main:app --reload --port 8000

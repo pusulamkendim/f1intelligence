@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -15,6 +16,8 @@ from app.db.session import SessionLocal
 from app.ingestion.fia_rss import MatchTerm, StoryRule, choose_story, parse_fia_rss
 
 SOURCE_KEY = "fia_press_release_rss"
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,13 +31,50 @@ class IngestionStats:
 
 async def fetch_items(limit: int) -> list:
     settings = get_settings()
-    headers = {"User-Agent": settings.source_user_agent}
+    headers = {
+        "User-Agent": settings.source_user_agent,
+        "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
+    }
+    timeout = httpx.Timeout(
+        connect=settings.source_http_connect_timeout_seconds,
+        read=settings.source_http_read_timeout_seconds,
+        write=10.0,
+        pool=10.0,
+    )
+    last_error: Exception | None = None
 
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=20) as client:
-        response = await client.get(settings.fia_press_release_feed_url)
-        response.raise_for_status()
+    async with httpx.AsyncClient(
+        headers=headers,
+        follow_redirects=True,
+        timeout=timeout,
+    ) as client:
+        for attempt in range(1, settings.source_http_retries + 1):
+            try:
+                response = await client.get(settings.fia_press_release_feed_url)
+                response.raise_for_status()
+                return parse_fia_rss(response.text)[:limit]
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                if exc.response.status_code not in RETRYABLE_STATUS_CODES:
+                    raise
+            except httpx.TransportError as exc:
+                last_error = exc
 
-    return parse_fia_rss(response.text)[:limit]
+            if attempt < settings.source_http_retries:
+                delay = settings.source_http_retry_backoff_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "FIA feed request failed on attempt %s/%s (%s); retrying in %.1fs",
+                    attempt,
+                    settings.source_http_retries,
+                    type(last_error).__name__,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+
+    raise RuntimeError(
+        "FIA feed request failed after "
+        f"{settings.source_http_retries} attempts: {type(last_error).__name__}"
+    ) from last_error
 
 
 async def ensure_source(session: AsyncSession) -> Any:

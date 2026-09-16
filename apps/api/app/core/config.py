@@ -25,6 +25,10 @@ class Settings(BaseSettings):
         default="F1Intelligence/0.1 (development)",
         min_length=8,
     )
+    source_http_connect_timeout_seconds: float = Field(default=10.0, gt=0)
+    source_http_read_timeout_seconds: float = Field(default=90.0, gt=0)
+    source_http_retries: int = Field(default=3, ge=1, le=10)
+    source_http_retry_backoff_seconds: float = Field(default=2.0, ge=0)
     fia_press_release_feed_url: str = "https://www.fia.com/rss/press-release"
 
     @property

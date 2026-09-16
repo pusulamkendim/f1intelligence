@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
 from uuid import UUID
 from xml.etree import ElementTree
+
+ICA_IDENTIFIER_RE = re.compile(r"\bICA-\d{4}(?:-\d{2}){2,}\b", re.IGNORECASE)
+F1_RELEVANCE_RE = re.compile(r"\b(?:formula\s+(?:one|1)|f1)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -29,6 +33,7 @@ class StoryRule:
     slug: str
     min_score: int
     terms: tuple[MatchTerm, ...]
+    identifiers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,12 +95,44 @@ def parse_fia_rss(xml_text: str) -> list[FeedItem]:
     return items
 
 
+def extract_identifiers(item: FeedItem) -> tuple[str, ...]:
+    searchable = " ".join((item.title, item.url or "", *item.categories))
+    return tuple(sorted({match.group(0).upper() for match in ICA_IDENTIFIER_RE.finditer(searchable)}))
+
+
+def is_f1_relevant(item: FeedItem) -> bool:
+    searchable = " ".join((item.title, *item.categories))
+    return F1_RELEVANCE_RE.search(searchable) is not None
+
+
 def score_item(item: FeedItem, rule: StoryRule) -> int:
     searchable = " ".join((item.title, *item.categories)).casefold()
     return sum(term.weight for term in rule.terms if term.term.casefold() in searchable)
 
 
 def choose_story(item: FeedItem, rules: list[StoryRule]) -> StoryMatch:
+    item_identifiers = set(extract_identifiers(item))
+    identifier_matches = [
+        rule
+        for rule in rules
+        if item_identifiers.intersection(identifier.upper() for identifier in rule.identifiers)
+    ]
+
+    if len(identifier_matches) == 1:
+        rule = identifier_matches[0]
+        return StoryMatch(
+            story_id=rule.story_id,
+            story_slug=rule.slug,
+            score=100,
+            status="matched",
+        )
+
+    if len(identifier_matches) > 1:
+        return StoryMatch(story_id=None, story_slug=None, score=100, status="ambiguous")
+
+    if not is_f1_relevant(item):
+        return StoryMatch(story_id=None, story_slug=None, score=0, status="irrelevant")
+
     eligible: list[tuple[int, StoryRule]] = []
 
     for rule in rules:

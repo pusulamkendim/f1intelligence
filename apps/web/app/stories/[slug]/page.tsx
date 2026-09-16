@@ -114,6 +114,17 @@ export default async function StoryPage({ params }: { params: Promise<{ slug: st
 
         <h1>{story.title}</h1>
         {story.summary && <p className="storySummary">{story.summary}</p>}
+
+        {story.entities.length > 0 && (
+          <div className="storyEntityRow" aria-label="Story context">
+            {story.entities.map((entity) => (
+              <span className={`storyEntityTag storyEntity-${entity.entity_type}`} key={entity.id}>
+                <span>{titleCase(entity.entity_type)}</span>
+                {entity.display_name}
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="shell storyGrid">

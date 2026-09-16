@@ -16,6 +16,7 @@ This directory is the living product and strategy knowledge base for the project
 10. [`10_MEDIA_ASSET_AND_IMAGE_PIPELINE.md`](10_MEDIA_ASSET_AND_IMAGE_PIPELINE.md) — media sourcing hierarchy, rights validation, MediaAsset model, Wikimedia/photographer/stock workflows, attribution, derivatives, deduplication, storage, AI-image policy and MVP acceptance criteria.
 11. [`11_MEDIA_DISCOVERY_TECHNICAL_SPEC.md`](11_MEDIA_DISCOVERY_TECHNICAL_SPEC.md) — implementation-ready Wikimedia Commons discovery architecture, API strategy, rights evaluator, candidate ranking, persistence, approval transaction, security, observability, testing and delivery phases.
 12. [`12_TECH_STACK_DATABASE_AND_REPO.md`](12_TECH_STACK_DATABASE_AND_REPO.md) — selected web/API stack, service boundaries, initial PostgreSQL schema, repository layout, deployment direction and vertical-slice implementation order.
+13. [`13_OFFICIAL_SOURCE_INGESTION.md`](13_OFFICIAL_SOURCE_INGESTION.md) — FIA RSS ingestion, deterministic Story matching, deduplication, Evidence attachment, failure handling and MVP acceptance criteria.
 
 ## Documentation rules
 

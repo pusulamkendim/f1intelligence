@@ -34,7 +34,9 @@ make infra-up
 make setup
 ```
 
-On a fresh PostgreSQL volume, both `001_init.sql` and the synthetic `002_seed_demo_story.sql` fixture run automatically. If the database volume already existed before the demo fixture was added, apply it explicitly:
+On a fresh PostgreSQL volume, SQL files under `infra/postgres/` run automatically in filename order. If your database volume predates a newer bootstrap file, use the explicit setup target for that feature.
+
+The synthetic Story fixture can be reapplied with:
 
 ```bash
 make seed-demo
@@ -51,12 +53,31 @@ Local endpoints:
 
 - Web: `http://localhost:3000`
 - Demo Story Page: `http://localhost:3000/stories/demo-rear-stability`
+- FIA pilot Story Page: `http://localhost:3000/stories/fia-2026-sporting-decisions`
 - API: `http://localhost:8000`
 - Demo Story API: `http://localhost:8000/api/v1/stories/demo-rear-stability`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
 
 The demo Story is explicitly synthetic. It exists only to validate the vertical slice and must not be treated as Formula 1 reporting.
+
+## Official FIA source ingestion
+
+The first real ingestion adapter consumes the FIA's official press-release RSS feed. It stores the source headline, link, publication timestamp and matching metadata; it does not mirror FIA article bodies.
+
+For an existing database, create the ingestion tables and pilot Story matching rules:
+
+```bash
+make ingestion-setup
+```
+
+Fetch the latest FIA RSS items, deduplicate them and attach qualifying official evidence to configured Stories:
+
+```bash
+make ingest-fia
+```
+
+The pilot rule intentionally requires a weighted match score. Generic press-conference transcripts should not attach merely because they contain `F1`; FIA decisions, calendar changes and regulation-related items can cross the threshold. Equal top scores are retained as `ambiguous` rather than silently attached.
 
 ## Checks
 
@@ -73,13 +94,15 @@ The living specification is under [`docs/`](docs/README.md). Product decisions s
 
 ## Current implementation
 
-The first read-only vertical slice now works end to end:
+The current vertical slice now reaches a real official source:
 
 ```text
-Story Page
+FIA official RSS
+  -> deterministic story matcher
+  -> deduplicated Evidence row
   -> GET /api/v1/stories/{slug}
-  -> PostgreSQL Story + Evidence data
-  -> evidence timeline
+  -> Story Page evidence timeline
+  -> direct source link back to FIA
 ```
 
-The next implementation slice is to connect real, verified ingestion evidence and then attach approved MediaAssets from the Wikimedia discovery pipeline.
+The next implementation slice is MediaAsset attachment, followed by additional official-source adapters and a proper editorial ingestion review queue.

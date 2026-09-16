@@ -77,9 +77,10 @@ def test_list_stories_returns_public_story_summaries() -> None:
     assert "significance" not in payload[0]
 
 
-def test_get_story_returns_story_and_evidence() -> None:
+def test_get_story_returns_story_entities_and_evidence() -> None:
     now = datetime(2026, 9, 16, 18, 0, tzinfo=UTC)
     story_id = uuid4()
+    entity_id = uuid4()
     evidence_id = uuid4()
     fake_session = FakeSession(
         [
@@ -97,6 +98,18 @@ def test_get_story_returns_story_and_evidence() -> None:
                     "what_to_watch_next": "Next evidence update.",
                     "created_at": now,
                     "updated_at": now,
+                }
+            ],
+            [
+                {
+                    "id": entity_id,
+                    "entity_type": "team",
+                    "slug": "red-bull-racing",
+                    "display_name": "Red Bull Racing",
+                    "relation_type": "mentioned",
+                    "confidence": 95,
+                    "match_method": "alias",
+                    "matched_alias": "Red Bull",
                 }
             ],
             [
@@ -130,6 +143,8 @@ def test_get_story_returns_story_and_evidence() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["slug"] == "demo-rear-stability"
+    assert payload["entities"][0]["slug"] == "red-bull-racing"
+    assert payload["entities"][0]["matched_alias"] == "Red Bull"
     assert payload["evidence"][0]["presentation_type"] == "documented_change"
     assert (
         payload["evidence"][0]["normalized_claim"]

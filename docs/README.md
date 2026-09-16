@@ -13,6 +13,7 @@ This directory is the living product and strategy knowledge base for the project
 7. [`07_UI_SPECIFICATION.md`](07_UI_SPECIFICATION.md) — implementation-ready P0 screen structure, shared components, mobile behavior, interaction rules and acceptance criteria.
 8. [`08_LOFI_WIREFRAMES.md`](08_LOFI_WIREFRAMES.md) — low-fidelity wireframes for the five critical MVP flows, responsive behavior, component inventory and prototype acceptance criteria.
 9. [`09_VISUAL_DESIGN_SYSTEM.md`](09_VISUAL_DESIGN_SYSTEM.md) — visual direction, colour and typography tokens, spacing/grid, card grammar, evidence/timeline language, race states, accessibility and high-fidelity prototype order.
+10. [`10_MEDIA_ASSET_AND_IMAGE_PIPELINE.md`](10_MEDIA_ASSET_AND_IMAGE_PIPELINE.md) — media sourcing hierarchy, rights validation, MediaAsset model, Wikimedia/photographer/stock workflows, attribution, derivatives, deduplication, storage, AI-image policy and MVP acceptance criteria.
 
 ## Documentation rules
 

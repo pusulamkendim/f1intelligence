@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import "./globals.css";
 
@@ -16,14 +17,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="siteHeader">
           <div className="shell headerInner">
-            <a className="brand" href="/" aria-label="F1 Intelligence home">
+            <Link className="brand" href="/" aria-label="F1 Intelligence home">
               F1 Intelligence
-            </a>
+            </Link>
             <nav className="nav" aria-label="Primary navigation">
-              <a href="/races">Races</a>
-              <a href="/teams">Teams</a>
-              <a href="/stories">Stories</a>
-              <a href="/technical">Technical</a>
+              <Link href="/races">Races</Link>
+              <Link href="/teams">Teams</Link>
+              <Link href="/stories">Stories</Link>
+              <Link href="/technical">Technical</Link>
             </nav>
           </div>
         </header>

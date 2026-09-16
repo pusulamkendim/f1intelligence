@@ -34,6 +34,12 @@ make infra-up
 make setup
 ```
 
+On a fresh PostgreSQL volume, both `001_init.sql` and the synthetic `002_seed_demo_story.sql` fixture run automatically. If the database volume already existed before the demo fixture was added, apply it explicitly:
+
+```bash
+make seed-demo
+```
+
 Then run the services in separate terminals:
 
 ```bash
@@ -44,11 +50,13 @@ make web-dev
 Local endpoints:
 
 - Web: `http://localhost:3000`
+- Demo Story Page: `http://localhost:3000/stories/demo-rear-stability`
 - API: `http://localhost:8000`
+- Demo Story API: `http://localhost:8000/api/v1/stories/demo-rear-stability`
 - API docs: `http://localhost:8000/docs`
 - API health: `http://localhost:8000/health`
 
-`docker-compose.yml` starts PostgreSQL and Redis. On a fresh PostgreSQL volume, `infra/postgres/001_init.sql` creates the initial Story/Evidence/Publication/Media schema.
+The demo Story is explicitly synthetic. It exists only to validate the vertical slice and must not be treated as Formula 1 reporting.
 
 ## Checks
 
@@ -63,16 +71,15 @@ CI also runs API lint/tests and web lint/typecheck/build for pull requests.
 
 The living specification is under [`docs/`](docs/README.md). Product decisions should be recorded there before they become hidden assumptions in code.
 
-## Current implementation target
+## Current implementation
 
-The first vertical slice is intentionally narrow:
+The first read-only vertical slice now works end to end:
 
 ```text
 Story Page
-  -> Story API
+  -> GET /api/v1/stories/{slug}
   -> PostgreSQL Story + Evidence data
   -> evidence timeline
-  -> approved MediaAsset
 ```
 
-The next major implementation step after bootstrap is a real read-only Story API and a Story Page backed by database fixtures, followed by Wikimedia candidate discovery.
+The next implementation slice is to connect real, verified ingestion evidence and then attach approved MediaAssets from the Wikimedia discovery pipeline.

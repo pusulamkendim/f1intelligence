@@ -93,7 +93,10 @@ def test_get_story_returns_story_and_evidence() -> None:
     payload = response.json()
     assert payload["slug"] == "demo-rear-stability"
     assert payload["evidence"][0]["presentation_type"] == "documented_change"
-    assert payload["evidence"][0]["normalized_claim"] == "A synthetic technical change was recorded."
+    assert (
+        payload["evidence"][0]["normalized_claim"]
+        == "A synthetic technical change was recorded."
+    )
 
 
 def test_get_story_returns_404() -> None:

@@ -6,6 +6,8 @@ from app.ingestion.fia_rss import (
     MatchTerm,
     StoryRule,
     choose_story,
+    extract_reference_ids,
+    is_f1_relevant,
     parse_fia_rss,
     score_item,
 )
@@ -45,6 +47,7 @@ def rule() -> StoryRule:
             MatchTerm("calendar", 2),
             MatchTerm("decision", 2),
         ),
+        identifiers=("ICA-2026-06-07-08-09",),
     )
 
 
@@ -76,6 +79,57 @@ def test_matcher_rejects_generic_press_conference_transcript() -> None:
     assert match.story_id is None
 
 
+def test_reference_identifier_matches_without_explicit_f1_marker() -> None:
+    item = FeedItem(
+        external_id="ica-statement",
+        title="ICA Statement regarding ICA Case ICA-2026-06-07-08-09",
+        url=None,
+        published_at=None,
+        categories=(),
+    )
+
+    match = choose_story(item, [rule()])
+
+    assert match.status == "matched"
+    assert match.story_slug == "fia-2026-sporting-decisions"
+    assert match.score == 100
+
+
+def test_extract_reference_ids_normalizes_case() -> None:
+    assert extract_reference_ids("Update for ica-2026-06-07-08-09") == (
+        "ICA-2026-06-07-08-09",
+    )
+
+
+def test_non_f1_fia_item_is_filtered_before_keyword_scoring() -> None:
+    item = FeedItem(
+        external_id="wec",
+        title="WEC: Ferrari triumphs in Texan thriller as Toyota suffers late heartbreak",
+        url=None,
+        published_at=None,
+        categories=(),
+    )
+
+    assert is_f1_relevant(item) is False
+    match = choose_story(item, [rule()])
+    assert match.status == "filtered"
+    assert match.story_id is None
+
+
+def test_f1_item_without_matching_story_remains_unmatched() -> None:
+    item = FeedItem(
+        external_id="f1-news",
+        title="Formula 1 media briefing for the next Grand Prix",
+        url=None,
+        published_at=None,
+        categories=(),
+    )
+
+    match = choose_story(item, [rule()])
+    assert match.status == "unmatched"
+    assert match.story_id is None
+
+
 def test_matcher_marks_equal_top_scores_ambiguous() -> None:
     item = FeedItem(
         external_id="x",
@@ -99,4 +153,27 @@ def test_matcher_marks_equal_top_scores_ambiguous() -> None:
 
     match = choose_story(item, [first, second])
     assert match.status == "ambiguous"
+    assert match.story_id is None
+
+
+def test_duplicate_reference_identifier_across_stories_is_ambiguous() -> None:
+    first = rule()
+    second = StoryRule(
+        story_id=uuid4(),
+        slug="another-story",
+        min_score=3,
+        terms=(MatchTerm("appeal", 3),),
+        identifiers=("ICA-2026-06-07-08-09",),
+    )
+    item = FeedItem(
+        external_id="ica-statement",
+        title="ICA Statement regarding ICA Case ICA-2026-06-07-08-09",
+        url=None,
+        published_at=None,
+        categories=(),
+    )
+
+    match = choose_story(item, [first, second])
+    assert match.status == "ambiguous"
+    assert match.score == 100
     assert match.story_id is None

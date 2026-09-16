@@ -1,0 +1,33 @@
+.entityRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.entityTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--paper-200);
+  border-radius: 999px;
+  background: var(--paper-000);
+  color: var(--ink-800);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.entityTag span {
+  color: var(--ink-600);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .entityRow {
+    margin-top: 20px;
+  }
+}

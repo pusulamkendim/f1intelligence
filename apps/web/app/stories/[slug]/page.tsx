@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 
 import { getStory, type StoryEvidence } from "@/lib/api";
 
+import entityStyles from "./story-entities.module.css";
+
 const presentationLabels: Record<string, string> = {
   documented_change: "Documented change",
   documented_fact: "Documented fact",
@@ -114,6 +116,17 @@ export default async function StoryPage({ params }: { params: Promise<{ slug: st
 
         <h1>{story.title}</h1>
         {story.summary && <p className="storySummary">{story.summary}</p>}
+
+        {story.entities.length > 0 && (
+          <div className={entityStyles.entityRow} aria-label="Story context">
+            {story.entities.map((entity) => (
+              <span className={entityStyles.entityTag} key={entity.id}>
+                <span>{titleCase(entity.entity_type)}</span>
+                {entity.display_name}
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="shell storyGrid">

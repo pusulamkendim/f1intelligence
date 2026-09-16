@@ -1,4 +1,4 @@
-CREATE TABLE ingestion_sources (
+CREATE TABLE IF NOT EXISTS ingestion_sources (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     key text NOT NULL UNIQUE,
     provider text NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE ingestion_sources (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE story_ingestion_rules (
+CREATE TABLE IF NOT EXISTS story_ingestion_rules (
     story_id uuid PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
     min_score smallint NOT NULL DEFAULT 3 CHECK (min_score BETWEEN 1 AND 100),
     enabled boolean NOT NULL DEFAULT true,
@@ -19,7 +19,7 @@ CREATE TABLE story_ingestion_rules (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE story_match_terms (
+CREATE TABLE IF NOT EXISTS story_match_terms (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     term text NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE story_match_terms (
     UNIQUE (story_id, term)
 );
 
-CREATE TABLE ingestion_items (
+CREATE TABLE IF NOT EXISTS ingestion_items (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id uuid NOT NULL REFERENCES ingestion_sources(id) ON DELETE CASCADE,
     external_id text NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE ingestion_items (
     UNIQUE (source_id, external_id)
 );
 
-CREATE INDEX story_match_terms_story_idx ON story_match_terms(story_id);
-CREATE INDEX ingestion_items_status_idx ON ingestion_items(status);
-CREATE INDEX ingestion_items_story_idx ON ingestion_items(matched_story_id);
-CREATE INDEX ingestion_items_published_idx ON ingestion_items(published_at DESC);
+CREATE INDEX IF NOT EXISTS story_match_terms_story_idx ON story_match_terms(story_id);
+CREATE INDEX IF NOT EXISTS ingestion_items_status_idx ON ingestion_items(status);
+CREATE INDEX IF NOT EXISTS ingestion_items_story_idx ON ingestion_items(matched_story_id);
+CREATE INDEX IF NOT EXISTS ingestion_items_published_idx ON ingestion_items(published_at DESC);

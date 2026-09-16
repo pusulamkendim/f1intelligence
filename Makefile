@@ -14,7 +14,7 @@ infra-down:
 	docker compose --env-file .env down
 
 seed-demo:
-	docker compose --env-file .env exec -T postgres psql -U $${POSTGRES_USER:-f1} -d $${POSTGRES_DB:-f1intelligence} < infra/postgres/002_seed_demo_story.sql
+	docker compose --env-file .env exec -T postgres sh -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/002_seed_demo_story.sql
 
 api-dev:
 	cd apps/api && uv run fastapi dev app/main.py --port 8000

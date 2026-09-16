@@ -17,6 +17,7 @@ This directory is the living product and strategy knowledge base for the project
 11. [`11_MEDIA_DISCOVERY_TECHNICAL_SPEC.md`](11_MEDIA_DISCOVERY_TECHNICAL_SPEC.md) — implementation-ready Wikimedia Commons discovery architecture, API strategy, rights evaluator, candidate ranking, persistence, approval transaction, security, observability, testing and delivery phases.
 12. [`12_TECH_STACK_DATABASE_AND_REPO.md`](12_TECH_STACK_DATABASE_AND_REPO.md) — selected web/API stack, service boundaries, initial PostgreSQL schema, repository layout, deployment direction and vertical-slice implementation order.
 13. [`13_OFFICIAL_SOURCE_INGESTION.md`](13_OFFICIAL_SOURCE_INGESTION.md) — FIA RSS ingestion, deterministic Story matching, deduplication, Evidence attachment, failure handling and MVP acceptance criteria.
+14. [`14_LOCAL_PORT_CONFIGURATION.md`](14_LOCAL_PORT_CONFIGURATION.md) — developer-machine port overrides, including Redis host-port configuration without modifying tracked Compose files.
 
 ## Documentation rules
 

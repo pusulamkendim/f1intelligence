@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { getStories } from "@/lib/api";
 
+import styles from "./stories.module.css";
+
 function titleCase(value: string) {
   return value
     .replaceAll("_", " ")
@@ -19,8 +21,8 @@ export default async function StoriesPage() {
   const stories = await getStories();
 
   return (
-    <main className="storiesIndex">
-      <section className="shell storiesHero">
+    <main className={styles.page}>
+      <section className={`shell ${styles.hero}`}>
         <p className="eyebrow">STORIES</p>
         <h1>Developments worth following over time.</h1>
         <p>
@@ -28,11 +30,11 @@ export default async function StoriesPage() {
         </p>
       </section>
 
-      <section className="shell storyList" aria-label="Current stories">
+      <section className={`shell ${styles.list}`} aria-label="Current stories">
         {stories.length > 0 ? (
           stories.map((story) => (
-            <article className="storyListItem" key={story.id}>
-              <div className="storyListMeta">
+            <article className={styles.item} key={story.id}>
+              <div className={styles.meta}>
                 <span>{titleCase(story.status)}</span>
                 <span>{story.evidence_count} evidence</span>
                 <span>Updated {formatDate(story.updated_at)}</span>
@@ -41,13 +43,13 @@ export default async function StoriesPage() {
                 <Link href={`/stories/${story.slug}`}>{story.title}</Link>
               </h2>
               {story.summary && <p>{story.summary}</p>}
-              <Link className="storyListLink" href={`/stories/${story.slug}`}>
+              <Link className={styles.link} href={`/stories/${story.slug}`}>
                 Follow story →
               </Link>
             </article>
           ))
         ) : (
-          <div className="storyListEmpty">
+          <div className={styles.empty}>
             <h2>No stories are available yet.</h2>
             <p>Start the API and ingestion pipeline to populate this page with persistent F1 stories.</p>
           </div>

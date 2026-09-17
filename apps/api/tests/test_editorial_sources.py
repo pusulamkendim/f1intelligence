@@ -178,6 +178,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
         '<a href="/racing/formula-1/standings">Standings</a>'
         '<a href="/racing/formula-1/f1-academy">F1 Academy</a>'
         '<a href="/racing/formula-1/2026/schedule/">Schedule</a>'
+        '<a href="/racing/formula-1/2026/azerbaijan-grand-prix">GP landing</a>'
         '<a href="/racing/formula-1/2026/spanish-grand-prix/race-report/">Race</a>',
         mclaren,
     ) == ["https://www.mclaren.com/racing/formula-1/2026/spanish-grand-prix/race-report"]
@@ -186,6 +187,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
     assert discover_listing_urls(
         '<a href="/int-en/races">Calendar</a>'
         '<a href="/int-en/my-paddock">Paddock</a>'
+        '<a href="/int-en/newsletter">Newsletter</a>'
         '<a href="/int-en/races/spanish-grand-prix/race-report">Race story</a>'
         '<a href="/int-en/madrid-on-rails-2026">Story</a>',
         red_bull,

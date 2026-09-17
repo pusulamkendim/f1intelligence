@@ -67,11 +67,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         mode="listing",
         discovery_url="https://www.mclaren.com/racing/formula-1/articles/",
         allowed_hosts=("www.mclaren.com", "mclaren.com"),
-        article_path_pattern=(
-            r"^/racing/formula-1/(?!articles/?$)(?!standings/?$)(?!schedule/?$)"
-            r"(?!results/?$)(?!f1-academy(?:/|$))(?!drivers(?:/|$)|team(?:/|$)|car(?:/|$))"
-            r"(?!\d{4}/schedule/?$).+"
-        ),
+        article_path_pattern=r"^/racing/formula-1/\d{4}/[^/]+/[^/]+/?$",
         team_slug="mclaren",
     ),
     EditorialSource(
@@ -92,9 +88,10 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.redbullracing.com/int-en",
         allowed_hosts=("www.redbullracing.com", "redbullracing.com"),
         article_path_pattern=(
-            r"^/int-en/(?!races/?$)(?!my-paddock/?$)(?!drivers(?:/|$)|partners(?:/|$)|"
-            r"team(?:/|$)|cars(?:/|$)|collections(?:/|$)|experiences(?:/|$)|"
-            r"events(?:/|$)|calendar(?:/|$)|shop(?:/|$)).+"
+            r"^/int-en/(?!races/?$)(?!my-paddock/?$)(?!newsletter/?$)"
+            r"(?!drivers(?:/|$)|partners(?:/|$)|team(?:/|$)|cars(?:/|$)|"
+            r"collections(?:/|$)|experiences(?:/|$)|events(?:/|$)|"
+            r"calendar(?:/|$)|shop(?:/|$)).+"
         ),
         team_slug="red-bull-racing",
     ),

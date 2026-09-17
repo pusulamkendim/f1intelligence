@@ -22,7 +22,7 @@ from app.ingestion.source_item_store import (
     load_entity_aliases,
     persist_source_item_with_entities,
 )
-from app.ingestion.source_registry import SOURCES, SOURCE_BY_KEY
+from app.ingestion.source_registry import SOURCE_BY_KEY, SOURCES
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 logger = logging.getLogger(__name__)

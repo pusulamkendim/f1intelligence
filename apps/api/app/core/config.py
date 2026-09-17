@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         "https://www.fia.com/documents/championships/"
         "fia-formula-one-world-championship-14/season/season-2026-2072"
     )
+    formula1_latest_url: str = "https://www.formula1.com/en/latest"
 
     @property
     def cors_origin_list(self) -> list[str]:

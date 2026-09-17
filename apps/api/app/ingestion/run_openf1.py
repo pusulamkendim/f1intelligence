@@ -26,6 +26,8 @@ from app.ingestion.openf1_grid_store import (
     starting_grid_loaded_session_keys,
     upsert_starting_grid,
 )
+from app.ingestion.openf1_overtakes import parse_overtakes
+from app.ingestion.openf1_overtakes_store import overtakes_loaded_session_keys, upsert_overtakes
 from app.ingestion.openf1_store import (
     load_season_races,
     loaded_session_result_keys,
@@ -77,7 +79,7 @@ def _telemetry_candidates(sessions: list[OpenF1Session], cached_keys: set[int], 
     return _bounded_candidates(sessions, cached_keys, limit=limit, now=now)
 
 
-def _grid_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
+def _race_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
     return [item for item in sessions if item.session_code in {"race", "sprint"}]
 
 
@@ -101,6 +103,7 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                 telemetry_cached = await telemetry_loaded_session_keys(db, season)
                 context_cached = await context_loaded_session_keys(db, season)
                 grid_cached = await starting_grid_loaded_session_keys(db, season)
+                overtakes_cached = await overtakes_loaded_session_keys(db, season)
                 await _audit(db, dataset="meetings", season=season, records_seen=len(meetings), records_written=meeting_links, metadata={"matched_races": len(matches)})
                 await _audit(db, dataset="sessions", season=season, records_seen=len(provider_sessions), records_written=len(session_ids), metadata={"matched_sessions": len(session_ids), "canonicalized_driver_names": canonicalized_driver_names})
         matched_sessions = [item for item in provider_sessions if item.session_key in session_ids]
@@ -123,8 +126,9 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
             results_written += len(results)
             unresolved_entries += unresolved
 
+        race_sessions = _race_sessions(matched_sessions)
         grid_summary: list[dict[str, int]] = []
-        for item in _bounded_candidates(_grid_sessions(matched_sessions), grid_cached, limit=telemetry_limit):
+        for item in _bounded_candidates(race_sessions, grid_cached, limit=telemetry_limit):
             grid = parse_starting_grid(await client._get("starting_grid", session_key=item.session_key))
             if not grid:
                 continue
@@ -139,6 +143,16 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                     count = await upsert_starting_grid(db, session_id=session_ids[item.session_key], session_key=item.session_key, rows=grid, drivers=driver_map, teams=team_map)
                     await _audit(db, dataset="starting_grid", season=season, records_seen=len(grid), records_written=count, metadata={"session_key": item.session_key, "session_code": item.session_code})
             grid_summary.append({"session_key": item.session_key, "rows": len(grid)})
+
+        overtakes_summary: list[dict[str, int]] = []
+        for item in _bounded_candidates(race_sessions, overtakes_cached, limit=telemetry_limit):
+            overtakes = parse_overtakes(await client._get("overtakes", session_key=item.session_key))
+            async with SessionLocal() as db:
+                async with db.begin():
+                    driver_map = await driver_entity_map(db, session_ids[item.session_key])
+                    count = await upsert_overtakes(db, session_id=session_ids[item.session_key], session_key=item.session_key, rows=overtakes, drivers=driver_map)
+                    await _audit(db, dataset="overtakes", season=season, records_seen=len(overtakes), records_written=count, metadata={"session_key": item.session_key, "session_code": item.session_code, "provider_semantics": "position_exchange_may_include_pit_or_penalty"})
+            overtakes_summary.append({"session_key": item.session_key, "rows": len(overtakes)})
 
         telemetry_summary: list[dict[str, int]] = []
         for item in _telemetry_candidates(matched_sessions, telemetry_cached, limit=telemetry_limit):
@@ -169,13 +183,13 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                     wt = await upsert_weather(db, session_id=session_ids[item.session_key], session_key=item.session_key, rows=weather)
                     await _audit(db, dataset="race_context", season=season, records_seen=len(race_control) + len(intervals) + len(pits) + len(weather), records_written=rc + iv + pt + wt, metadata={"session_key": item.session_key, "session_code": item.session_code, "race_control": rc, "intervals": iv, "pit_stops": pt, "weather": wt})
             context_summary.append({"session_key": item.session_key, "race_control": len(race_control), "intervals": len(intervals), "pit_stops": len(pits), "weather": len(weather)})
-    return {"season": season, "meetings_seen": len(meetings), "meetings_matched": len(matches), "sessions_seen": len(provider_sessions), "sessions_matched": len(session_ids), "fetched_result_session_keys": fetched_session_keys, "cached_result_session_keys": sorted(reused_keys), "session_entries_written": entries_written, "session_results_written": results_written, "unresolved_session_entries": unresolved_entries, "canonicalized_driver_names": canonicalized_driver_names, "starting_grid_sessions": grid_summary, "telemetry_sessions": telemetry_summary, "race_context_sessions": context_summary}
+    return {"season": season, "meetings_seen": len(meetings), "meetings_matched": len(matches), "sessions_seen": len(provider_sessions), "sessions_matched": len(session_ids), "fetched_result_session_keys": fetched_session_keys, "cached_result_session_keys": sorted(reused_keys), "session_entries_written": entries_written, "session_results_written": results_written, "unresolved_session_entries": unresolved_entries, "canonicalized_driver_names": canonicalized_driver_names, "starting_grid_sessions": grid_summary, "overtake_sessions": overtakes_summary, "telemetry_sessions": telemetry_summary, "race_context_sessions": context_summary}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync race-weekend sessions from OpenF1")
     parser.add_argument("--season", type=int, required=True)
-    parser.add_argument("--telemetry-limit", type=int, default=2, help="Maximum completed sessions to fetch telemetry, grid and race context for per run")
+    parser.add_argument("--telemetry-limit", type=int, default=2, help="Maximum completed sessions to fetch telemetry, grid, overtakes and race context for per run")
     args = parser.parse_args()
     print(json.dumps(asyncio.run(sync_openf1(args.season, telemetry_limit=args.telemetry_limit)), indent=2))
 

@@ -287,7 +287,8 @@ DRIVER_FACETS: dict[str, FacetSpec] = {
     ),
     "documents": _spec(
         """
-        SELECT rd.*, rde.relation_type, rde.confidence AS relation_confidence
+        SELECT rd.*, rde.matched_alias, rde.match_method,
+               rde.confidence AS relation_confidence
         FROM race_document_entities rde
         JOIN race_documents rd ON rd.id = rde.race_document_id
         WHERE rde.entity_id = :entity_id

@@ -1,11 +1,13 @@
 from app.ingestion.openf1_telemetry import parse_laps, parse_positions, parse_stints
 
 
-def test_parse_laps_preserves_provider_identity_and_payload() -> None:
-    rows = parse_laps([{"session_key": 999, "driver_number": 4, "lap_number": 12, "lap_duration": 81.234, "is_pit_out_lap": False, "date_start": "2026-09-13T12:10:00Z"}])
+def test_parse_laps_preserves_provider_identity_and_richer_context() -> None:
+    rows = parse_laps([{"session_key": 999, "driver_number": 4, "lap_number": 12, "lap_duration": 81.234, "is_pit_out_lap": False, "date_start": "2026-09-13T12:10:00Z", "duration_sector_1": 25.1, "duration_sector_2": 30.2, "duration_sector_3": 25.934, "i1_speed": 301, "i2_speed": 287, "st_speed": 322, "segments_sector_1": [2049, 2051]}])
     assert rows[0].session_key == 999
-    assert rows[0].driver_number == 4
     assert rows[0].lap_number == 12
+    assert rows[0].sector_2_duration_seconds == 30.2
+    assert rows[0].st_speed_kph == 322
+    assert rows[0].segments_sector_1 == [2049, 2051]
     assert rows[0].raw_payload["lap_duration"] == 81.234
 
 

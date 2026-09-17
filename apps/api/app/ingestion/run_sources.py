@@ -17,10 +17,13 @@ from app.ingestion.editorial_sources import (
     parse_article_html,
     parse_feed,
 )
+from app.ingestion.source_item_clustering import cluster_features, refresh_cluster_candidates
+from app.ingestion.source_item_entities import SourceItemText, classify_source_item_entities
 from app.ingestion.source_item_store import (
     SourceItemRecord,
     load_entity_aliases,
-    persist_source_item_with_entities,
+    reconcile_source_item_entities,
+    upsert_source_item,
 )
 from app.ingestion.source_registry import (
     DISABLED_SOURCE_REASONS,
@@ -28,6 +31,7 @@ from app.ingestion.source_registry import (
     SOURCE_BY_KEY,
     SOURCES,
 )
+from app.ingestion.source_semantics import classification_title
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 COMMUNITY_SOURCE_GAP_SECONDS = 5.0
@@ -41,6 +45,7 @@ class SourceStats:
     fetched: int = 0
     persisted: int = 0
     entity_links: int = 0
+    cluster_candidates: int = 0
     failures: int = 0
     error: str | None = None
 
@@ -58,17 +63,23 @@ class IngestionStats:
         return sum(item.entity_links for item in self.sources)
 
     @property
+    def cluster_candidates(self) -> int:
+        return sum(item.cluster_candidates for item in self.sources)
+
+    @property
     def failures(self) -> int:
         return sum(item.failures for item in self.sources)
 
 
 def item_to_source_record(source: EditorialSource, item: EditorialItem) -> SourceItemRecord:
+    semantic_title = classification_title(source.key, item.title)
     metadata = dict(item.raw_metadata)
     metadata.update(
         {
             "source_key": source.key,
             "source_class": source.source_class,
             "team_slug": source.team_slug,
+            "classification_title": semantic_title,
         }
     )
     return SourceItemRecord(
@@ -192,15 +203,38 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
             async with session.begin():
                 aliases = await load_entity_aliases(session)
                 for item in items:
+                    record = item_to_source_record(source, item)
                     season = item.published_at.year if item.published_at else None
-                    _, classifications = await persist_source_item_with_entities(
+                    semantic_title = str(record.raw_metadata["classification_title"])
+                    source_item_id = await upsert_source_item(session, record)
+                    classifications = classify_source_item_entities(
+                        SourceItemText(
+                            title=semantic_title,
+                            standfirst=record.standfirst,
+                            summary=record.summary,
+                            body_excerpt=record.body_excerpt,
+                            season=season,
+                            source_context_team_slug=source.team_slug,
+                        ),
+                        aliases,
+                    )
+                    await reconcile_source_item_entities(
                         session,
-                        item_to_source_record(source, item),
-                        season=season,
-                        aliases=aliases,
+                        source_item_id,
+                        classifications,
                     )
                     stats.persisted += 1
                     stats.entity_links += len(classifications)
+                    stats.cluster_candidates += await refresh_cluster_candidates(
+                        session,
+                        source_item_id=source_item_id,
+                        features=cluster_features(
+                            provider=record.provider,
+                            title=semantic_title,
+                            published_at=record.published_at,
+                            classifications=classifications,
+                        ),
+                    )
     except Exception as exc:  # source isolation: one provider must not abort the whole run
         stats.failures += 1
         stats.error = f"{type(exc).__name__}: {exc}"
@@ -265,6 +299,7 @@ async def async_main() -> None:
             {
                 "persisted": stats.persisted,
                 "entity_links": stats.entity_links,
+                "cluster_candidates": stats.cluster_candidates,
                 "failures": stats.failures,
                 "sources": [asdict(item) for item in stats.sources],
             },

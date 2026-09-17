@@ -45,18 +45,28 @@ class OpenF1Position:
 
 
 def parse_laps(payload: list[dict[str, Any]]) -> list[OpenF1Lap]:
-    return [OpenF1Lap(int(r["session_key"]), int(r["driver_number"]), int(r["lap_number"]), float(r["lap_duration"]) if r.get("lap_duration") is not None else None, bool(r.get("is_pit_out_lap", False)), _dt(r.get("date_start")), r) for r in payload if r.get("driver_number") is not None and r.get("lap_number") is not None]
+    parsed: list[OpenF1Lap] = []
+    for row in payload:
+        if row.get("driver_number") is None or row.get("lap_number") is None:
+            continue
+        parsed.append(OpenF1Lap(session_key=int(row["session_key"]), driver_number=int(row["driver_number"]), lap_number=int(row["lap_number"]), lap_duration_seconds=float(row["lap_duration"]) if row.get("lap_duration") is not None else None, is_pit_out_lap=bool(row.get("is_pit_out_lap", False)), started_at=_dt(row.get("date_start")), raw_payload=row))
+    return parsed
 
 
 def parse_stints(payload: list[dict[str, Any]]) -> list[OpenF1Stint]:
-    return [OpenF1Stint(int(r["session_key"]), int(r["driver_number"]), int(r["stint_number"]), int(r["lap_start"]) if r.get("lap_start") is not None else None, int(r["lap_end"]) if r.get("lap_end") is not None else None, r.get("compound"), int(r["tyre_age_at_start"]) if r.get("tyre_age_at_start") is not None else None, r) for r in payload if r.get("driver_number") is not None and r.get("stint_number") is not None]
+    parsed: list[OpenF1Stint] = []
+    for row in payload:
+        if row.get("driver_number") is None or row.get("stint_number") is None:
+            continue
+        parsed.append(OpenF1Stint(session_key=int(row["session_key"]), driver_number=int(row["driver_number"]), stint_number=int(row["stint_number"]), lap_start=int(row["lap_start"]) if row.get("lap_start") is not None else None, lap_end=int(row["lap_end"]) if row.get("lap_end") is not None else None, compound=row.get("compound"), tyre_age_at_start=int(row["tyre_age_at_start"]) if row.get("tyre_age_at_start") is not None else None, raw_payload=row))
+    return parsed
 
 
 def parse_positions(payload: list[dict[str, Any]]) -> list[OpenF1Position]:
     parsed: list[OpenF1Position] = []
-    for r in payload:
-        observed_at = _dt(r.get("date"))
-        if r.get("driver_number") is None or r.get("position") is None or observed_at is None:
+    for row in payload:
+        observed_at = _dt(row.get("date"))
+        if row.get("driver_number") is None or row.get("position") is None or observed_at is None:
             continue
-        parsed.append(OpenF1Position(int(r["session_key"]), int(r["driver_number"]), observed_at, int(r["position"]), r))
+        parsed.append(OpenF1Position(session_key=int(row["session_key"]), driver_number=int(row["driver_number"]), observed_at=observed_at, position=int(row["position"]), raw_payload=row))
     return parsed

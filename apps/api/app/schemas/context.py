@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -45,12 +46,23 @@ class ContextProvenance(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ContextTimelineEvent(BaseModel):
+    id: str
+    type: str
+    occurred_at: datetime
+    label: str
+    target: ContextTargetRef | None = None
+    source: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    provenance: ContextProvenance | None = None
+
+
 class ContextResponse(BaseModel):
     contract_version: str = "1"
     target: ContextTarget
     relations: list[ContextRelation] = Field(default_factory=list)
     facets: list[ContextFacet] = Field(default_factory=list)
-    timeline: list[dict[str, Any]] = Field(default_factory=list)
+    timeline: list[ContextTimelineEvent] = Field(default_factory=list)
     related: list[ContextTargetRef] = Field(default_factory=list)
     provenance: list[ContextProvenance] = Field(default_factory=list)
 

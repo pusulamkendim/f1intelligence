@@ -13,6 +13,18 @@ class SourceItemText:
     summary: str | None = None
     body_excerpt: str | None = None
     season: int | None = None
+    source_context_team_slug: str | None = None
+
+
+@dataclass(frozen=True)
+class SourceItemEntityCandidate:
+    entity_id: UUID
+    entity_type: str
+    slug: str
+    display_name: str
+    strongest_scope: str
+    strongest_mention: EntityMention
+    detected_in: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -54,6 +66,52 @@ def _scope_mentions(
     }
 
 
+def detect_source_item_entity_candidates(
+    item: SourceItemText,
+    aliases: list[EntityAlias],
+) -> tuple[SourceItemEntityCandidate, ...]:
+    """Detect canonical entities without assigning semantic story relations yet."""
+    by_scope = _scope_mentions(item, aliases)
+    matches: dict[UUID, list[tuple[str, EntityMention]]] = {}
+
+    for scope, mentions in by_scope.items():
+        for mention in mentions:
+            matches.setdefault(mention.entity_id, []).append((scope, mention))
+
+    candidates: list[SourceItemEntityCandidate] = []
+    for entity_matches in matches.values():
+        entity_matches.sort(
+            key=lambda pair: (
+                _SCOPE_PRIORITY[pair[0]],
+                len(pair[1].matched_alias),
+                pair[1].confidence,
+            ),
+            reverse=True,
+        )
+        strongest_scope, strongest = entity_matches[0]
+        detected_in = tuple(
+            sorted(
+                {scope for scope, _mention in entity_matches},
+                key=lambda scope: _SCOPE_PRIORITY[scope],
+                reverse=True,
+            )
+        )
+        candidates.append(
+            SourceItemEntityCandidate(
+                entity_id=strongest.entity_id,
+                entity_type=strongest.entity_type,
+                slug=strongest.slug,
+                display_name=strongest.display_name,
+                strongest_scope=strongest_scope,
+                strongest_mention=strongest,
+                detected_in=detected_in,
+            )
+        )
+
+    candidates.sort(key=lambda item: (item.entity_type, item.display_name.casefold()))
+    return tuple(candidates)
+
+
 def _relation_type(entity_type: str, detected_in: tuple[str, ...]) -> str:
     # Race references define event context rather than article ownership.
     if entity_type == "race":
@@ -84,51 +142,95 @@ def _confidence(
     return min(100, max(1, confidence))
 
 
+def classify_source_item_entity_candidates(
+    candidates: tuple[SourceItemEntityCandidate, ...],
+) -> tuple[SourceItemEntityClassification, ...]:
+    """Assign deterministic relations to already-resolved entity candidates."""
+    classifications: list[SourceItemEntityClassification] = []
+    for candidate in candidates:
+        strongest = candidate.strongest_mention
+        relation_type = _relation_type(candidate.entity_type, candidate.detected_in)
+        classifications.append(
+            SourceItemEntityClassification(
+                entity_id=candidate.entity_id,
+                entity_type=candidate.entity_type,
+                slug=candidate.slug,
+                display_name=candidate.display_name,
+                relation_type=relation_type,
+                confidence=_confidence(strongest, relation_type, candidate.detected_in),
+                match_method=f"{candidate.strongest_scope}_alias",
+                matched_alias=strongest.matched_alias,
+                detected_in=candidate.detected_in,
+            )
+        )
+    return tuple(classifications)
+
+
+def _active_source_context_aliases(
+    item: SourceItemText,
+    aliases: list[EntityAlias],
+) -> list[EntityAlias]:
+    team_slug = item.source_context_team_slug
+    if not team_slug:
+        return []
+
+    matches: list[EntityAlias] = []
+    for alias in aliases:
+        if alias.entity_type != "team" or alias.slug != team_slug:
+            continue
+        if item.season is not None:
+            if alias.valid_from_season is not None and item.season < alias.valid_from_season:
+                continue
+            if alias.valid_to_season is not None and item.season > alias.valid_to_season:
+                continue
+        matches.append(alias)
+    return matches
+
+
+def _add_source_context(
+    item: SourceItemText,
+    aliases: list[EntityAlias],
+    classifications: tuple[SourceItemEntityClassification, ...],
+) -> tuple[SourceItemEntityClassification, ...]:
+    context_aliases = _active_source_context_aliases(item, aliases)
+    if not context_aliases:
+        return classifications
+
+    context_aliases.sort(key=lambda alias: (alias.confidence, len(alias.alias)), reverse=True)
+    context = context_aliases[0]
+    if any(classification.entity_id == context.entity_id for classification in classifications):
+        # A textual semantic relation is more informative than publisher/source context.
+        return classifications
+
+    return classifications + (
+        SourceItemEntityClassification(
+            entity_id=context.entity_id,
+            entity_type=context.entity_type,
+            slug=context.slug,
+            display_name=context.display_name,
+            relation_type="context",
+            confidence=100,
+            match_method="source_context",
+            matched_alias=context.display_name,
+            detected_in=("source",),
+        ),
+    )
+
+
 def classify_source_item_entities(
     item: SourceItemText,
     aliases: list[EntityAlias],
 ) -> tuple[SourceItemEntityClassification, ...]:
-    by_scope = _scope_mentions(item, aliases)
-    matches: dict[UUID, list[tuple[str, EntityMention]]] = {}
-
-    for scope, mentions in by_scope.items():
-        for mention in mentions:
-            matches.setdefault(mention.entity_id, []).append((scope, mention))
-
-    classifications: list[SourceItemEntityClassification] = []
-    for entity_matches in matches.values():
-        entity_matches.sort(
-            key=lambda pair: (
-                _SCOPE_PRIORITY[pair[0]],
-                len(pair[1].matched_alias),
-                pair[1].confidence,
+    candidates = detect_source_item_entity_candidates(item, aliases)
+    classifications = classify_source_item_entity_candidates(candidates)
+    classifications = _add_source_context(item, aliases, classifications)
+    return tuple(
+        sorted(
+            classifications,
+            key=lambda value: (
+                -value.confidence,
+                value.entity_type,
+                value.display_name.casefold(),
             ),
-            reverse=True,
         )
-        strongest_scope, strongest = entity_matches[0]
-        detected_in = tuple(
-            sorted(
-                {scope for scope, _mention in entity_matches},
-                key=lambda scope: _SCOPE_PRIORITY[scope],
-                reverse=True,
-            )
-        )
-        relation_type = _relation_type(strongest.entity_type, detected_in)
-        classifications.append(
-            SourceItemEntityClassification(
-                entity_id=strongest.entity_id,
-                entity_type=strongest.entity_type,
-                slug=strongest.slug,
-                display_name=strongest.display_name,
-                relation_type=relation_type,
-                confidence=_confidence(strongest, relation_type, detected_in),
-                match_method=f"{strongest_scope}_alias",
-                matched_alias=strongest.matched_alias,
-                detected_in=detected_in,
-            )
-        )
-
-    classifications.sort(
-        key=lambda item: (-item.confidence, item.entity_type, item.display_name.casefold())
     )
-    return tuple(classifications)

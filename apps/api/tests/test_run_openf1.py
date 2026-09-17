@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from app.ingestion.openf1 import OpenF1Session
-from app.ingestion.run_openf1 import _result_candidates
+from app.ingestion.run_openf1 import _result_candidates, _telemetry_candidates
 
 
 def _session(key: int, end_hour: int) -> OpenF1Session:
@@ -25,22 +25,24 @@ def _session(key: int, end_hour: int) -> OpenF1Session:
 
 def test_result_candidates_skip_cached_but_refresh_latest_completed() -> None:
     sessions = [_session(1, 8), _session(2, 9), _session(3, 10)]
-    to_fetch, reused = _result_candidates(
-        sessions,
-        cached_keys={1, 2, 3},
-        now=datetime(2026, 9, 17, 12, tzinfo=UTC),
-    )
-
+    to_fetch, reused = _result_candidates(sessions, cached_keys={1, 2, 3}, now=datetime(2026, 9, 17, 12, tzinfo=UTC))
     assert [item.session_key for item in to_fetch] == [3]
     assert reused == [1, 2, 3]
 
 
 def test_result_candidates_do_not_fetch_sessions_inside_live_window() -> None:
     sessions = [_session(1, 10), _session(2, 12)]
-    to_fetch, _ = _result_candidates(
-        sessions,
-        cached_keys=set(),
-        now=datetime(2026, 9, 17, 12, 15, tzinfo=UTC),
-    )
-
+    to_fetch, _ = _result_candidates(sessions, cached_keys=set(), now=datetime(2026, 9, 17, 12, 15, tzinfo=UTC))
     assert [item.session_key for item in to_fetch] == [1]
+
+
+def test_telemetry_candidates_bound_backfill_and_refresh_latest() -> None:
+    sessions = [_session(1, 7), _session(2, 8), _session(3, 9), _session(4, 10)]
+    selected = _telemetry_candidates(sessions, {1, 4}, limit=2, now=datetime(2026, 9, 17, 12, tzinfo=UTC))
+    assert [item.session_key for item in selected] == [2, 4]
+
+
+def test_telemetry_candidates_exclude_live_window() -> None:
+    sessions = [_session(1, 10), _session(2, 12)]
+    selected = _telemetry_candidates(sessions, set(), limit=2, now=datetime(2026, 9, 17, 12, 15, tzinfo=UTC))
+    assert [item.session_key for item in selected] == [1]

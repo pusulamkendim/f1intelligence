@@ -2,7 +2,9 @@ from datetime import UTC, datetime
 
 from app.ingestion.formula1_com import (
     MAX_BODY_EXCERPT_CHARS,
+    Formula1Article,
     discover_formula1_article_urls,
+    is_formula1_relevant_article,
     parse_formula1_article,
 )
 from app.ingestion.run_formula1 import RIGHTS_POLICY, SOURCE_CLASS, article_to_source_item
@@ -89,6 +91,20 @@ def test_article_parser_falls_back_to_open_graph_metadata() -> None:
     assert article.language == "en-GB"
     assert article.section == "News"
     assert article.author == "Formula 1"
+
+
+def test_formula1_relevance_filter_drops_feeder_series_sections() -> None:
+    base = dict(
+        external_id="id",
+        canonical_url="https://www.formula1.com/en/latest/article/example.ID",
+        title="Example",
+    )
+
+    assert not is_formula1_relevant_article(Formula1Article(**base, section="F2"))
+    assert not is_formula1_relevant_article(Formula1Article(**base, section="F3"))
+    assert not is_formula1_relevant_article(Formula1Article(**base, section="F1 Academy"))
+    assert is_formula1_relevant_article(Formula1Article(**base, section="Technical"))
+    assert is_formula1_relevant_article(Formula1Article(**base, section=None))
 
 
 def test_formula1_article_maps_to_source_item_contract() -> None:

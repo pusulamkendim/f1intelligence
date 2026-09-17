@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources materialize-stories list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources materialize-stories materialize-timeline list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -45,7 +45,8 @@ ingestion-setup:
 		infra/postgres/020_story_source_clustering.sql \
 		infra/postgres/021_editorial_person_registry.sql \
 		infra/postgres/022_story_materialization.sql \
-		infra/postgres/023_story_quality_v2.sql; do \
+		infra/postgres/023_story_quality_v2.sql \
+		infra/postgres/024_unified_timeline.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -55,7 +56,8 @@ ingestion-migrate:
 		infra/postgres/020_story_source_clustering.sql \
 		infra/postgres/021_editorial_person_registry.sql \
 		infra/postgres/022_story_materialization.sql \
-		infra/postgres/023_story_quality_v2.sql; do \
+		infra/postgres/023_story_quality_v2.sql \
+		infra/postgres/024_unified_timeline.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -67,12 +69,18 @@ ingest-fia-docs:
 
 ingest-formula1: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_formula1 --limit $${LIMIT:-25} --pages $${PAGES:-3}
+	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${LIMIT:-500}
 
 ingest-sources: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_sources $${SOURCE:+--source $$SOURCE} --limit $${LIMIT:-20}
+	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${TIMELINE_LIMIT:-500}
 
 materialize-stories: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_story_materialization --limit $${LIMIT:-500}
+	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${LIMIT:-500}
+
+materialize-timeline: ingestion-migrate
+	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${LIMIT:-500}
 
 list-sources:
 	cd apps/api && uv run python -m app.ingestion.run_sources --list-sources

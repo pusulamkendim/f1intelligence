@@ -49,7 +49,12 @@ class ContextProvenance(BaseModel):
 class ContextTimelineEvent(BaseModel):
     id: str
     type: str
+    # Legacy anchor name kept for contract compatibility. For scheduled/effective
+    # events this is the timeline coordinate, not a claim that the event occurred.
     occurred_at: datetime
+    temporal_relation: str = "occurred_at"
+    reported_at: datetime | None = None
+    precision: str | None = None
     label: str
     target: ContextTargetRef | None = None
     source: str

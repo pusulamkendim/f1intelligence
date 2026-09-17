@@ -34,7 +34,7 @@ class FakeSession:
         self.index = 0
 
     async def execute(self, *_args: Any, **_kwargs: Any) -> FakeResult:
-        rows = self.responses[self.index]
+        rows = self.responses[self.index] if self.index < len(self.responses) else []
         self.index += 1
         return FakeResult(rows)
 

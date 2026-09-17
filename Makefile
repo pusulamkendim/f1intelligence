@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia ingest-fia-docs ingest-formula1 ingest-sources list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -15,8 +15,8 @@ seed-demo:
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/seed_demo.sql
 
 # Bootstrap migrations are historical SQL scripts, not a replay-safe migration engine.
-# Refuse to replay them over an existing schema; ingestion targets below therefore do
-# not depend on this target. Apply new incremental migrations explicitly when added.
+# Refuse to replay them over an existing schema; ingestion-migrate below applies only
+# the incremental source-layer migrations that are explicitly idempotent.
 ingestion-setup:
 	@if docker compose --env-file .env exec -T postgres sh -lc 'psql -At -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "SELECT to_regclass('"'"'public.teams'"'"') IS NOT NULL"' | grep -qx t; then \
 		echo "Database schema already initialized; skipping historical migration replay."; \
@@ -41,7 +41,15 @@ ingestion-setup:
 		infra/postgres/016_session_starting_grid.sql \
 		infra/postgres/017_session_overtakes.sql \
 		infra/postgres/018_calendar_amendment_safe_race_identity.sql \
-		infra/postgres/019_source_item_entities.sql; do \
+		infra/postgres/019_source_item_entities.sql \
+		infra/postgres/020_story_source_clustering.sql; do \
+			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
+	done
+
+ingestion-migrate:
+	@for migration in \
+		infra/postgres/019_source_item_entities.sql \
+		infra/postgres/020_story_source_clustering.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -51,10 +59,10 @@ ingest-fia:
 ingest-fia-docs:
 	cd apps/api && uv run python -m app.ingestion.run_fia_documents --limit 50
 
-ingest-formula1:
+ingest-formula1: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_formula1 --limit $${LIMIT:-25} --pages $${PAGES:-3}
 
-ingest-sources:
+ingest-sources: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_sources $${SOURCE:+--source $$SOURCE} --limit $${LIMIT:-20}
 
 list-sources:

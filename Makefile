@@ -30,7 +30,7 @@ ingestion-setup:
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/013_openf1_lap_stint_position.sql
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/014_evidence_canonical_provenance.sql
 
- ingest-fia: ingestion-setup
+ingest-fia: ingestion-setup
 	cd apps/api && uv run python -m app.ingestion.run_fia --limit 50
 
 ingest-fia-docs: ingestion-setup

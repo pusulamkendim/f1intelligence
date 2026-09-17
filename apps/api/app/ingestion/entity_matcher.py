@@ -49,6 +49,15 @@ def _is_active_for_season(alias: EntityAlias, season: int | None) -> bool:
     return True
 
 
+def _matches_case_sensitive_token(text: str, value: str) -> bool:
+    """Match provider codes such as HAM/VER/FOR without colliding with prose words."""
+    token = value.strip()
+    if not token:
+        return False
+    pattern = rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])"
+    return re.search(pattern, text) is not None
+
+
 def match_entities(
     text: str,
     aliases: list[EntityAlias],
@@ -69,7 +78,11 @@ def match_entities(
         normalized_alias = normalize_entity_text(alias.alias)
         if len(normalized_alias) < 2:
             continue
-        if f" {normalized_alias} " not in haystack:
+
+        if alias.alias_type == "driver_code":
+            if not _matches_case_sensitive_token(text, alias.alias):
+                continue
+        elif f" {normalized_alias} " not in haystack:
             continue
 
         mention = EntityMention(

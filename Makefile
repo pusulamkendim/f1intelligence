@@ -42,14 +42,16 @@ ingestion-setup:
 		infra/postgres/017_session_overtakes.sql \
 		infra/postgres/018_calendar_amendment_safe_race_identity.sql \
 		infra/postgres/019_source_item_entities.sql \
-		infra/postgres/020_story_source_clustering.sql; do \
+		infra/postgres/020_story_source_clustering.sql \
+		infra/postgres/021_editorial_person_registry.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
 ingestion-migrate:
 	@for migration in \
 		infra/postgres/019_source_item_entities.sql \
-		infra/postgres/020_story_source_clustering.sql; do \
+		infra/postgres/020_story_source_clustering.sql \
+		infra/postgres/021_editorial_person_registry.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 

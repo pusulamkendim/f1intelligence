@@ -17,6 +17,20 @@ TIMELINE_LIMIT = 30
 PER_TYPE_LIMIT = 12
 RELATED_LIMIT = 12
 
+EVENT_SOURCES = {
+    "race": "races",
+    "race_result": "race_results",
+    "session": "race_sessions",
+    "session_start": "race_sessions",
+    "race_control": "session_race_control_events",
+    "pit_stop": "session_pit_stops",
+    "overtake": "session_overtakes",
+    "story": "stories",
+    "evidence": "evidence",
+    "document": "race_documents",
+    "publication": "publications",
+}
+
 
 def _timeline_sql(events_sql: str) -> str:
     return f"""
@@ -171,7 +185,7 @@ DRIVER_TIMELINE_SQL = _timeline_sql(
 TEAM_TIMELINE_SQL = _timeline_sql(
     """
     SELECT
-        ('team-race:' || r.id::text || ':' || :entity_id::text) AS event_id,
+        ('team-race:' || r.id::text || ':' || CAST(:entity_id AS text)) AS event_id,
         'race_result'::text AS event_type,
         COALESCE(r.start_at, r.weekend_end_date::timestamptz, MAX(rr.fetched_at)) AS occurred_at,
         r.official_name ||
@@ -503,7 +517,7 @@ SEASON_TIMELINE_SQL = _timeline_sql(
 
     UNION ALL
 
-    SELECT DISTINCT ON (s.id)
+    SELECT
         s.id::text,
         'story'::text,
         s.updated_at,
@@ -521,10 +535,13 @@ SEASON_TIMELINE_SQL = _timeline_sql(
             'confidence', s.confidence
         ))
     FROM stories s
-    JOIN story_entities se ON se.story_id = s.id
-    JOIN races r ON r.entity_id = se.entity_id
-    WHERE r.season = :season
-    ORDER BY s.id, s.updated_at DESC
+    WHERE EXISTS (
+        SELECT 1
+        FROM story_entities se
+        JOIN races r ON r.entity_id = se.entity_id
+        WHERE se.story_id = s.id
+          AND r.season = :season
+    )
 
     UNION ALL
 
@@ -687,7 +704,7 @@ async def load_timeline(db: AsyncSession, target: ResolvedTarget) -> list[Contex
                 occurred_at=row["occurred_at"],
                 label=row["label"],
                 target=_timeline_target(row),
-                source=row["event_type"],
+                source=EVENT_SOURCES.get(row["event_type"], row["event_type"]),
                 metadata=dict(row["metadata"] or {}),
                 provenance=_timeline_provenance(row),
             )

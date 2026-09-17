@@ -23,6 +23,7 @@ from app.ingestion.jolpica_store import (
     upsert_qualifying_results,
     upsert_race_results,
 )
+from app.ingestion.jolpica_sync_state import imported_result_rounds
 
 CompletedRound = tuple[int, list[JolpicaRaceResult], list[JolpicaQualifyingResult]]
 
@@ -63,77 +64,125 @@ def _candidate_rounds(
     return sorted(candidates)
 
 
-async def _fetch_completed_rounds(
+def _rounds_to_fetch(
+    candidate_rounds: list[int],
+    imported_rounds: set[int],
+    round_number: int | None,
+) -> list[int]:
+    if round_number is not None:
+        return [round_number]
+    if not candidate_rounds:
+        return []
+
+    candidates = set(candidate_rounds)
+    missing = candidates - imported_rounds
+    # Always refresh the latest started round so late corrections are picked up.
+    missing.add(max(candidate_rounds))
+    return sorted(missing)
+
+
+async def _fetch_completed_round(
     client: JolpicaClient,
     season: int,
-    candidate_rounds: list[int],
-) -> list[CompletedRound]:
-    completed: list[CompletedRound] = []
-    for candidate_round in candidate_rounds:
-        race_results = await client.race_results(season, candidate_round)
-        if not race_results:
-            continue
-        qualifying_results = await client.qualifying_results(season, candidate_round)
-        completed.append((candidate_round, race_results, qualifying_results))
-    return completed
+    round_number: int,
+) -> CompletedRound | None:
+    race_results = await client.race_results(season, round_number)
+    if not race_results:
+        return None
+    qualifying_results = await client.qualifying_results(season, round_number)
+    return round_number, race_results, qualifying_results
+
+
+async def _persist_completed_round(
+    completed: CompletedRound,
+    season: int,
+) -> tuple[int, int]:
+    completed_round, race_results, qualifying_results = completed
+    async with SessionLocal() as session:
+        async with session.begin():
+            race_written = await upsert_race_results(
+                session,
+                season,
+                completed_round,
+                race_results,
+                _source_url(season, "race_results", completed_round),
+            )
+            qualifying_written = await upsert_qualifying_results(
+                session,
+                season,
+                completed_round,
+                qualifying_results,
+                _source_url(season, "qualifying_results", completed_round),
+            )
+            await record_sync_run(
+                session,
+                dataset="race_results",
+                season=season,
+                round_number=completed_round,
+                source_url=_source_url(season, "race_results", completed_round),
+                records_seen=len(race_results),
+                records_written=race_written,
+            )
+            await record_sync_run(
+                session,
+                dataset="qualifying_results",
+                season=season,
+                round_number=completed_round,
+                source_url=_source_url(season, "qualifying_results", completed_round),
+                records_seen=len(qualifying_results),
+                records_written=qualifying_written,
+            )
+    return race_written, qualifying_written
 
 
 async def sync_jolpica(season: int, round_number: int | None = None) -> dict[str, object]:
+    race_results_written = 0
+    qualifying_results_written = 0
+    fetched_completed_rounds: list[int] = []
+
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         client = JolpicaClient(http_client)
         calendar = await client.season_calendar(season)
         candidates = _candidate_rounds(calendar, round_number)
-        completed_rounds = await _fetch_completed_rounds(client, season, candidates)
-        if not completed_rounds:
-            scope = f"round {round_number}" if round_number is not None else "the season"
-            raise ValueError(f"no completed race results are available for {scope}")
 
-        resolved_round = max(item[0] for item in completed_rounds)
+        async with SessionLocal() as session:
+            async with session.begin():
+                calendar_written = await upsert_calendar(session, calendar)
+                already_imported = await imported_result_rounds(session, season)
+                await record_sync_run(
+                    session,
+                    dataset="calendar",
+                    season=season,
+                    round_number=None,
+                    source_url=_source_url(season, "calendar"),
+                    records_seen=len(calendar),
+                    records_written=calendar_written,
+                )
+
+        rounds_to_fetch = _rounds_to_fetch(candidates, already_imported, round_number)
+        completed_round_numbers = set(already_imported)
+
+        for candidate_round in rounds_to_fetch:
+            completed = await _fetch_completed_round(client, season, candidate_round)
+            if completed is None:
+                continue
+            race_written, qualifying_written = await _persist_completed_round(completed, season)
+            race_results_written += race_written
+            qualifying_results_written += qualifying_written
+            completed_round_numbers.add(candidate_round)
+            fetched_completed_rounds.append(candidate_round)
+
+        if round_number is not None and round_number not in completed_round_numbers:
+            raise ValueError(f"no completed race results are available for round {round_number}")
+        if not completed_round_numbers:
+            raise ValueError("no completed race results are available for the season")
+
+        resolved_round = max(completed_round_numbers)
         drivers = await client.driver_standings(season, resolved_round)
         constructors = await client.constructor_standings(season, resolved_round)
 
-    race_results_written = 0
-    qualifying_results_written = 0
     async with SessionLocal() as session:
         async with session.begin():
-            calendar_written = await upsert_calendar(session, calendar)
-
-            for completed_round, race_results, qualifying_results in completed_rounds:
-                race_written = await upsert_race_results(
-                    session,
-                    season,
-                    completed_round,
-                    race_results,
-                    _source_url(season, "race_results", completed_round),
-                )
-                qualifying_written = await upsert_qualifying_results(
-                    session,
-                    season,
-                    completed_round,
-                    qualifying_results,
-                    _source_url(season, "qualifying_results", completed_round),
-                )
-                race_results_written += race_written
-                qualifying_results_written += qualifying_written
-                await record_sync_run(
-                    session,
-                    dataset="race_results",
-                    season=season,
-                    round_number=completed_round,
-                    source_url=_source_url(season, "race_results", completed_round),
-                    records_seen=len(race_results),
-                    records_written=race_written,
-                )
-                await record_sync_run(
-                    session,
-                    dataset="qualifying_results",
-                    season=season,
-                    round_number=completed_round,
-                    source_url=_source_url(season, "qualifying_results", completed_round),
-                    records_seen=len(qualifying_results),
-                    records_written=qualifying_written,
-                )
-
             driver_written = await store_driver_standings(
                 session,
                 season,
@@ -147,15 +196,6 @@ async def sync_jolpica(season: int, round_number: int | None = None) -> dict[str
                 resolved_round,
                 constructors,
                 _source_url(season, "constructor_standings", resolved_round),
-            )
-            await record_sync_run(
-                session,
-                dataset="calendar",
-                season=season,
-                round_number=None,
-                source_url=_source_url(season, "calendar"),
-                records_seen=len(calendar),
-                records_written=calendar_written,
             )
             await record_sync_run(
                 session,
@@ -180,7 +220,9 @@ async def sync_jolpica(season: int, round_number: int | None = None) -> dict[str
 
     return {
         "season": season,
-        "completed_rounds": [item[0] for item in completed_rounds],
+        "completed_rounds": sorted(completed_round_numbers),
+        "fetched_completed_rounds": fetched_completed_rounds,
+        "cached_completed_rounds": sorted(already_imported),
         "latest_completed_round": resolved_round,
         "calendar_records": len(calendar),
         "race_results_written": race_results_written,

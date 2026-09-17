@@ -9,7 +9,12 @@ from app.ingestion.jolpica import (
     JolpicaRace,
     JolpicaRaceResult,
 )
-from app.ingestion.run_jolpica import _candidate_rounds, _fetch_completed_rounds, _source_url
+from app.ingestion.run_jolpica import (
+    _candidate_rounds,
+    _fetch_completed_round,
+    _rounds_to_fetch,
+    _source_url,
+)
 
 
 def _race(round_number: int, start_at: datetime | None, race_date: date) -> JolpicaRace:
@@ -81,8 +86,16 @@ def test_explicit_round_is_allowed_but_must_exist_in_calendar() -> None:
         _candidate_rounds(calendar, 3)
 
 
+def test_incremental_sync_skips_cached_rounds_but_refreshes_latest() -> None:
+    candidates = [1, 2, 3, 4, 5]
+
+    assert _rounds_to_fetch(candidates, {1, 2, 3}, None) == [4, 5]
+    assert _rounds_to_fetch(candidates, {1, 2, 3, 4, 5}, None) == [5]
+    assert _rounds_to_fetch(candidates, {1, 2, 3, 4, 5}, 2) == [2]
+
+
 @pytest.mark.asyncio
-async def test_completed_round_fetch_skips_rounds_without_race_results() -> None:
+async def test_completed_round_fetch_skips_round_without_race_results() -> None:
     class FakeClient:
         def __init__(self) -> None:
             self.qualifying_calls: list[int] = []
@@ -97,10 +110,31 @@ async def test_completed_round_fetch_skips_rounds_without_race_results() -> None
             return [_qualifying("driver-1")]
 
     client = FakeClient()
-    completed = await _fetch_completed_rounds(client, 2026, [1, 2])  # type: ignore[arg-type]
+    completed = await _fetch_completed_round(client, 2026, 2)  # type: ignore[arg-type]
 
-    assert [item[0] for item in completed] == [1]
-    assert client.qualifying_calls == [1]
+    assert completed is None
+    assert client.qualifying_calls == []
+
+
+@pytest.mark.asyncio
+async def test_completed_round_fetch_includes_qualifying() -> None:
+    class FakeClient:
+        async def race_results(self, season: int, round_number: int):
+            assert season == 2026
+            assert round_number == 1
+            return [_result("driver-1")]
+
+        async def qualifying_results(self, season: int, round_number: int):
+            assert season == 2026
+            assert round_number == 1
+            return [_qualifying("driver-1")]
+
+    completed = await _fetch_completed_round(FakeClient(), 2026, 1)  # type: ignore[arg-type]
+
+    assert completed is not None
+    assert completed[0] == 1
+    assert completed[1][0].driver_id == "driver-1"
+    assert completed[2][0].driver_id == "driver-1"
 
 
 def test_result_source_urls_are_round_scoped() -> None:

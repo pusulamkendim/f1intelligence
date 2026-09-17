@@ -152,6 +152,11 @@ async def upsert_race_results(
                 "fetched_at": fetched_at,
             },
         )
+    if rows:
+        await session.execute(
+            text("UPDATE races SET status = 'completed', updated_at = now() WHERE id = :race_id"),
+            {"race_id": race_id},
+        )
     return len(rows)
 
 

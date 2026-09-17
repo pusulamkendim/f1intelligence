@@ -320,8 +320,8 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
         node.get("headline")
         or parser.meta.get("og:title")
         or parser.meta.get("twitter:title")
-        or parser.first_h1
         or parser.document_title
+        or parser.first_h1
     )
     if not isinstance(title, str) or not title.strip():
         raise ValueError(f"{source.key} article has no usable title")
@@ -357,10 +357,10 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
             "team_slug": source.team_slug,
             "og_type": parser.meta.get("og:type"),
             "title_fallback": (
-                "h1"
-                if title == parser.first_h1
-                else "document_title"
+                "document_title"
                 if title == parser.document_title
+                else "h1"
+                if title == parser.first_h1
                 else None
             ),
         },

@@ -126,6 +126,34 @@ def test_generic_article_parser_prefers_json_ld() -> None:
     assert item.author == "Team Media"
 
 
+def test_generic_article_parser_falls_back_to_h1_then_document_title() -> None:
+    source = EditorialSource(
+        key="team_alpine",
+        provider="alpinef1.com",
+        source_class="first_party_team",
+        mode="listing",
+        discovery_url="https://www.alpinef1.com/news",
+    )
+    html = """
+    <html lang="en">
+      <head>
+        <title>Spanish Grand Prix recap | Alpine F1 Team</title>
+        <link rel="canonical" href="https://www.alpinef1.com/news/spanish-grand-prix-recap" />
+      </head>
+      <body><h1>Spanish Grand Prix recap</h1></body>
+    </html>
+    """
+
+    item = parse_article_html(
+        html,
+        requested_url="https://www.alpinef1.com/news/spanish-grand-prix-recap",
+        source=source,
+    )
+
+    assert item.title == "Spanish Grand Prix recap"
+    assert item.raw_metadata["title_fallback"] == "h1"
+
+
 def test_registry_covers_editorial_team_and_community_classes() -> None:
     keys = [source.key for source in ALL_SOURCES]
     assert len(keys) == len(set(keys))
@@ -147,10 +175,29 @@ def test_registry_covers_editorial_team_and_community_classes() -> None:
 def test_live_registry_corrections_filter_known_noise() -> None:
     mclaren = SOURCE_BY_KEY["team_mclaren"]
     assert discover_listing_urls(
+        '<a href="/racing/formula-1/standings">Standings</a>'
         '<a href="/racing/formula-1/2026/schedule/">Schedule</a>'
         '<a href="/racing/formula-1/2026/spanish-grand-prix/race-report/">Race</a>',
         mclaren,
     ) == ["https://www.mclaren.com/racing/formula-1/2026/spanish-grand-prix/race-report"]
+
+    red_bull = SOURCE_BY_KEY["team_red_bull"]
+    assert discover_listing_urls(
+        '<a href="/int-en/races">Calendar</a>'
+        '<a href="/int-en/races/spanish-grand-prix/race-report">Race story</a>'
+        '<a href="/int-en/madrid-on-rails-2026">Story</a>',
+        red_bull,
+    ) == [
+        "https://www.redbullracing.com/int-en/races/spanish-grand-prix/race-report",
+        "https://www.redbullracing.com/int-en/madrid-on-rails-2026",
+    ]
+
+    racing_bulls = SOURCE_BY_KEY["team_racing_bulls"]
+    assert discover_listing_urls(
+        '<a href="/int-en/the-garage">Garage</a>'
+        '<a href="/int-en/2026-driver-line-up-announcement">Story</a>',
+        racing_bulls,
+    ) == ["https://www.visacashapprb.com/int-en/2026-driver-line-up-announcement"]
 
     williams = SOURCE_BY_KEY["team_williams"]
     assert discover_listing_urls(
@@ -166,6 +213,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
 
     aston = SOURCE_BY_KEY["team_aston_martin"]
     assert discover_listing_urls(
+        '<a href="/en-GB/news/007">007 category</a>'
         '<a href="/en-GB/news/announcement">Announcement category</a>'
         '<a href="/en-GB/news/spanish-grand-prix-race-report">Race</a>',
         aston,
@@ -174,9 +222,10 @@ def test_live_registry_corrections_filter_known_noise() -> None:
 
 def test_failed_live_endpoints_are_explicitly_disabled() -> None:
     disabled_keys = {source.key for source in DISABLED_SOURCES}
-    assert disabled_keys == {"team_ferrari", "team_cadillac"}
+    assert disabled_keys == {"team_ferrari", "team_cadillac", "reddit_f1technical"}
     assert "403" in DISABLED_SOURCE_REASONS["team_ferrari"]
     assert "403" in DISABLED_SOURCE_REASONS["team_cadillac"]
+    assert "429" in DISABLED_SOURCE_REASONS["reddit_f1technical"]
     assert SOURCE_BY_KEY["team_red_bull"].discovery_url == "https://www.redbullracing.com/int-en"
     assert SOURCE_BY_KEY["team_racing_bulls"].provider == "visacashapprb.com"
     assert SOURCE_BY_KEY["team_audi"].discovery_url.endswith("audi-formula-racing-gmbh-17953")

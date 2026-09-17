@@ -36,3 +36,26 @@ CREATE TABLE IF NOT EXISTS source_item_story_decisions (
 
 CREATE INDEX IF NOT EXISTS source_item_story_decisions_worthy_idx
     ON source_item_story_decisions(story_worthy, taxonomy);
+
+-- A superseded auto-story remains as a redirect/audit row, but its automatically
+-- aggregated entity links must not leak into entity context facets as duplicate stories.
+CREATE OR REPLACE FUNCTION cleanup_superseded_story_entities()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.merged_into_story_id IS NOT NULL
+       AND OLD.merged_into_story_id IS DISTINCT FROM NEW.merged_into_story_id THEN
+        DELETE FROM story_entities
+        WHERE story_id = NEW.id
+          AND aggregation_method = 'source_aggregate_v1';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS stories_superseded_auto_entities_cleanup ON stories;
+CREATE TRIGGER stories_superseded_auto_entities_cleanup
+AFTER UPDATE OF merged_into_story_id ON stories
+FOR EACH ROW
+EXECUTE FUNCTION cleanup_superseded_story_entities();

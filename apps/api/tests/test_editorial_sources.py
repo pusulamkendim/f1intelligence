@@ -6,7 +6,7 @@ from app.ingestion.editorial_sources import (
     parse_article_html,
     parse_feed,
 )
-from app.ingestion.source_registry import SOURCES, SOURCE_BY_KEY
+from app.ingestion.source_registry import SOURCE_BY_KEY, SOURCES
 
 
 def test_rss_parser_extracts_metadata_without_full_article_fetch() -> None:

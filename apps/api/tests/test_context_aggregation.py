@@ -1,7 +1,13 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from app.context.aggregation import RELATED_LIMIT, build_related
+from app.context.aggregation import (
+    PER_TYPE_LIMIT,
+    RELATED_LIMIT,
+    TIMELINE_LIMIT,
+    TIMELINE_SQL,
+    build_related,
+)
 from app.context.resolver import ResolvedTarget
 from app.schemas.context import ContextRelation, ContextTarget, ContextTargetRef, ContextTimelineEvent
 
@@ -13,6 +19,16 @@ def _ref(target_type: str, key: str) -> ContextTargetRef:
         key=key,
         label=key,
     )
+
+
+def test_timeline_registry_covers_every_context_target_and_is_bounded() -> None:
+    assert set(TIMELINE_SQL) == {"driver", "team", "race", "session", "season", "story"}
+    assert TIMELINE_LIMIT == 30
+    assert PER_TYPE_LIMIT == 12
+    for statement in TIMELINE_SQL.values():
+        assert "PARTITION BY event_type" in statement
+        assert "type_rank <= :per_type_limit" in statement
+        assert "LIMIT :timeline_limit" in statement
 
 
 def test_related_prefers_relations_then_adds_timeline_targets_without_duplicates() -> None:

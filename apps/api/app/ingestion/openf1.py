@@ -9,6 +9,8 @@ from typing import Any
 
 import httpx
 
+from app.ingestion.openf1_telemetry import parse_laps, parse_positions, parse_stints
+
 OPENF1_BASE_URL = "https://api.openf1.org/v1"
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
@@ -89,18 +91,8 @@ def _dt(value: str) -> datetime:
 
 
 def normalize_session_code(name: str) -> str | None:
-    normalized = name.strip().casefold()
-    mapping = {
-        "practice 1": "practice_1",
-        "practice 2": "practice_2",
-        "practice 3": "practice_3",
-        "sprint qualifying": "sprint_qualifying",
-        "sprint shootout": "sprint_qualifying",
-        "sprint": "sprint",
-        "qualifying": "qualifying",
-        "race": "race",
-    }
-    return mapping.get(normalized)
+    mapping = {"practice 1": "practice_1", "practice 2": "practice_2", "practice 3": "practice_3", "sprint qualifying": "sprint_qualifying", "sprint shootout": "sprint_qualifying", "sprint": "sprint", "qualifying": "qualifying", "race": "race"}
+    return mapping.get(name.strip().casefold())
 
 
 def _scalar_and_qualifying(value: Any) -> tuple[float | None, float | None, float | None, float | None]:
@@ -126,118 +118,33 @@ def _gap_values(value: Any) -> tuple[float | None, str | None, float | None, flo
 
 
 def parse_meetings(payload: list[dict[str, Any]]) -> list[OpenF1Meeting]:
-    return [
-        OpenF1Meeting(
-            meeting_key=int(row["meeting_key"]),
-            year=int(row["year"]),
-            meeting_name=row["meeting_name"],
-            meeting_official_name=row.get("meeting_official_name"),
-            circuit_key=int(row["circuit_key"]) if row.get("circuit_key") is not None else None,
-            circuit_short_name=row.get("circuit_short_name"),
-            country_name=row.get("country_name"),
-            location=row.get("location"),
-            date_start=_dt(row["date_start"]),
-            date_end=_dt(row["date_end"]),
-            gmt_offset=row.get("gmt_offset"),
-            is_cancelled=bool(row.get("is_cancelled", False)),
-        )
-        for row in payload
-        if "Grand Prix" in row.get("meeting_name", "")
-    ]
+    return [OpenF1Meeting(int(r["meeting_key"]), int(r["year"]), r["meeting_name"], r.get("meeting_official_name"), int(r["circuit_key"]) if r.get("circuit_key") is not None else None, r.get("circuit_short_name"), r.get("country_name"), r.get("location"), _dt(r["date_start"]), _dt(r["date_end"]), r.get("gmt_offset"), bool(r.get("is_cancelled", False))) for r in payload if "Grand Prix" in r.get("meeting_name", "")]
 
 
 def parse_sessions(payload: list[dict[str, Any]]) -> list[OpenF1Session]:
-    parsed: list[OpenF1Session] = []
-    for row in payload:
-        code = normalize_session_code(row.get("session_name", ""))
-        if code is None:
-            continue
-        parsed.append(
-            OpenF1Session(
-                session_key=int(row["session_key"]),
-                meeting_key=int(row["meeting_key"]),
-                year=int(row["year"]),
-                session_name=row["session_name"],
-                session_type=row.get("session_type"),
-                session_code=code,
-                circuit_key=(
-                    int(row["circuit_key"]) if row.get("circuit_key") is not None else None
-                ),
-                circuit_short_name=row.get("circuit_short_name"),
-                country_name=row.get("country_name"),
-                location=row.get("location"),
-                date_start=_dt(row["date_start"]),
-                date_end=_dt(row["date_end"]) if row.get("date_end") else None,
-                gmt_offset=row.get("gmt_offset"),
-                is_cancelled=bool(row.get("is_cancelled", False)),
-            )
-        )
+    parsed = []
+    for r in payload:
+        code = normalize_session_code(r.get("session_name", ""))
+        if code:
+            parsed.append(OpenF1Session(int(r["session_key"]), int(r["meeting_key"]), int(r["year"]), r["session_name"], r.get("session_type"), code, int(r["circuit_key"]) if r.get("circuit_key") is not None else None, r.get("circuit_short_name"), r.get("country_name"), r.get("location"), _dt(r["date_start"]), _dt(r["date_end"]) if r.get("date_end") else None, r.get("gmt_offset"), bool(r.get("is_cancelled", False))))
     return parsed
 
 
 def parse_drivers(payload: list[dict[str, Any]]) -> list[OpenF1Driver]:
-    return [
-        OpenF1Driver(
-            session_key=int(row["session_key"]),
-            meeting_key=int(row["meeting_key"]),
-            driver_number=int(row["driver_number"]),
-            broadcast_name=row.get("broadcast_name"),
-            first_name=row.get("first_name"),
-            last_name=row.get("last_name"),
-            full_name=row.get("full_name"),
-            name_acronym=row.get("name_acronym"),
-            team_name=row.get("team_name"),
-            team_colour=row.get("team_colour"),
-            headshot_url=row.get("headshot_url"),
-        )
-        for row in payload
-        if row.get("driver_number") is not None
-    ]
+    return [OpenF1Driver(int(r["session_key"]), int(r["meeting_key"]), int(r["driver_number"]), r.get("broadcast_name"), r.get("first_name"), r.get("last_name"), r.get("full_name"), r.get("name_acronym"), r.get("team_name"), r.get("team_colour"), r.get("headshot_url")) for r in payload if r.get("driver_number") is not None]
 
 
 def parse_session_results(payload: list[dict[str, Any]]) -> list[OpenF1SessionResult]:
-    parsed: list[OpenF1SessionResult] = []
-    for row in payload:
-        duration, q1, q2, q3 = _scalar_and_qualifying(row.get("duration"))
-        gap, gap_text, q1_gap, q2_gap, q3_gap = _gap_values(row.get("gap_to_leader"))
-        parsed.append(
-            OpenF1SessionResult(
-                session_key=int(row["session_key"]),
-                meeting_key=int(row["meeting_key"]),
-                driver_number=int(row["driver_number"]),
-                position=int(row["position"]) if row.get("position") is not None else None,
-                dnf=bool(row.get("dnf", False)),
-                dns=bool(row.get("dns", False)),
-                dsq=bool(row.get("dsq", False)),
-                number_of_laps=(
-                    int(row["number_of_laps"])
-                    if row.get("number_of_laps") is not None
-                    else None
-                ),
-                duration_seconds=duration,
-                q1_seconds=q1,
-                q2_seconds=q2,
-                q3_seconds=q3,
-                gap_to_leader_seconds=gap,
-                gap_to_leader_text=gap_text,
-                q1_gap_seconds=q1_gap,
-                q2_gap_seconds=q2_gap,
-                q3_gap_seconds=q3_gap,
-            )
-        )
+    parsed = []
+    for r in payload:
+        duration, q1, q2, q3 = _scalar_and_qualifying(r.get("duration"))
+        gap, gap_text, q1_gap, q2_gap, q3_gap = _gap_values(r.get("gap_to_leader"))
+        parsed.append(OpenF1SessionResult(int(r["session_key"]), int(r["meeting_key"]), int(r["driver_number"]), int(r["position"]) if r.get("position") is not None else None, bool(r.get("dnf", False)), bool(r.get("dns", False)), bool(r.get("dsq", False)), int(r["number_of_laps"]) if r.get("number_of_laps") is not None else None, duration, q1, q2, q3, gap, gap_text, q1_gap, q2_gap, q3_gap))
     return parsed
 
 
 class OpenF1Client:
-    def __init__(
-        self,
-        client: httpx.AsyncClient,
-        *,
-        base_url: str = OPENF1_BASE_URL,
-        min_interval_seconds: float = 0.4,
-        retries: int = 4,
-        retry_backoff_seconds: float = 1.0,
-    ) -> None:
+    def __init__(self, client: httpx.AsyncClient, *, base_url: str = OPENF1_BASE_URL, min_interval_seconds: float = 0.4, retries: int = 4, retry_backoff_seconds: float = 1.0) -> None:
         self.client = client
         self.base_url = base_url.rstrip("/")
         self.min_interval_seconds = min_interval_seconds
@@ -260,8 +167,7 @@ class OpenF1Client:
         except ValueError:
             try:
                 parsed = parsedate_to_datetime(raw)
-                now = datetime.now(parsed.tzinfo or UTC)
-                return max(0.0, (parsed - now).total_seconds())
+                return max(0.0, (parsed - datetime.now(parsed.tzinfo or UTC)).total_seconds())
             except (TypeError, ValueError, OverflowError):
                 return None
 
@@ -270,41 +176,40 @@ class OpenF1Client:
         for attempt in range(self.retries):
             await self._pace()
             try:
-                response = await self.client.get(
-                    f"{self.base_url}/{endpoint.lstrip('/')}", params=params
-                )
+                response = await self.client.get(f"{self.base_url}/{endpoint.lstrip('/')}", params=params)
                 self._last_request_at = time.monotonic()
                 if response.status_code not in RETRYABLE_STATUSES:
                     response.raise_for_status()
                     return response.json()
-                last_error = httpx.HTTPStatusError(
-                    f"retryable OpenF1 HTTP {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
+                last_error = httpx.HTTPStatusError(f"retryable OpenF1 HTTP {response.status_code}", request=response.request, response=response)
                 delay = self._retry_after(response)
             except httpx.TransportError as exc:
                 self._last_request_at = time.monotonic()
                 last_error = exc
                 delay = None
-
             if attempt == self.retries - 1:
                 break
-            if delay is None:
-                delay = self.retry_backoff_seconds * (2**attempt)
-            await asyncio.sleep(delay)
-
+            await asyncio.sleep(delay if delay is not None else self.retry_backoff_seconds * (2**attempt))
         assert last_error is not None
         raise last_error
 
-    async def meetings(self, year: int) -> list[OpenF1Meeting]:
+    async def meetings(self, year: int):
         return parse_meetings(await self._get("meetings", year=year))
 
-    async def sessions(self, year: int) -> list[OpenF1Session]:
+    async def sessions(self, year: int):
         return parse_sessions(await self._get("sessions", year=year))
 
-    async def drivers(self, session_key: int) -> list[OpenF1Driver]:
+    async def drivers(self, session_key: int):
         return parse_drivers(await self._get("drivers", session_key=session_key))
 
-    async def session_results(self, session_key: int) -> list[OpenF1SessionResult]:
+    async def session_results(self, session_key: int):
         return parse_session_results(await self._get("session_result", session_key=session_key))
+
+    async def laps(self, session_key: int):
+        return parse_laps(await self._get("laps", session_key=session_key))
+
+    async def stints(self, session_key: int):
+        return parse_stints(await self._get("stints", session_key=session_key))
+
+    async def positions(self, session_key: int):
+        return parse_positions(await self._get("position", session_key=session_key))

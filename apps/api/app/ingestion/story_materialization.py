@@ -284,7 +284,9 @@ async def _accept_candidate(
             """
             UPDATE source_item_cluster_candidates
             SET status = 'accepted',
-                reasons = reasons || '{"accepted_by":"story_materializer_v1"}'::jsonb,
+                reasons = reasons || jsonb_build_object(
+                    'accepted_by', 'story_materializer_v1'
+                ),
                 updated_at = now()
             WHERE left_source_item_id = :left_id
               AND right_source_item_id = :right_id
@@ -393,7 +395,7 @@ async def _create_story(
             ) VALUES (
                 :slug, :title, :summary, :taxonomy, :method,
                 :source_item_id, :published_at, :published_at,
-                1, 'tentative', '{"version":1}'::jsonb
+                1, 'tentative', jsonb_build_object('version', 1)
             )
             RETURNING id
             """

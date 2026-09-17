@@ -95,7 +95,67 @@ async def test_client_uses_round_scoped_driver_standings_endpoint() -> None:
         return httpx.Response(200, json={"MRData": {"StandingsTable": {"StandingsLists": []}}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        client = JolpicaClient(http_client, base_url="https://jolpica.test/ergast/f1")
+        client = JolpicaClient(
+            http_client,
+            base_url="https://jolpica.test/ergast/f1",
+            min_interval_seconds=0,
+        )
         assert await client.driver_standings(2026, 4) == []
 
     assert requested == ["https://jolpica.test/ergast/f1/2026/4/driverstandings.json"]
+
+
+@pytest.mark.asyncio
+async def test_client_retries_rate_limit_and_honors_retry_after() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"}, request=request)
+        return httpx.Response(
+            200,
+            json={"MRData": {"RaceTable": {"Races": []}}},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = JolpicaClient(
+            http_client,
+            base_url="https://jolpica.test/ergast/f1",
+            max_retries=1,
+            retry_backoff_seconds=0,
+            min_interval_seconds=0,
+        )
+        assert await client.season_calendar(2026) == []
+
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_client_retries_transient_server_error() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(503, request=request)
+        return httpx.Response(
+            200,
+            json={"MRData": {"StandingsTable": {"StandingsLists": []}}},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = JolpicaClient(
+            http_client,
+            base_url="https://jolpica.test/ergast/f1",
+            max_retries=1,
+            retry_backoff_seconds=0,
+            min_interval_seconds=0,
+        )
+        assert await client.constructor_standings(2026, 3) == []
+
+    assert attempts == 2

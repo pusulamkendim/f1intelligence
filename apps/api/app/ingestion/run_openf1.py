@@ -13,9 +13,29 @@ from app.db.session import SessionLocal
 from app.ingestion.openf1 import OPENF1_BASE_URL, OpenF1Client, OpenF1Session
 from app.ingestion.openf1_canonicalize import reconcile_unresolved_session_drivers
 from app.ingestion.openf1_context import parse_intervals, parse_pit_stops, parse_race_control, parse_weather
-from app.ingestion.openf1_context_store import context_loaded_session_keys, upsert_intervals, upsert_pit_stops, upsert_race_control, upsert_weather
-from app.ingestion.openf1_store import load_season_races, loaded_session_result_keys, match_meetings_to_races, replace_session_entries, replace_session_results, upsert_meeting_links, upsert_sessions
-from app.ingestion.openf1_telemetry_store import driver_entity_map, telemetry_loaded_session_keys, upsert_laps, upsert_positions, upsert_stints
+from app.ingestion.openf1_context_store import (
+    context_loaded_session_keys,
+    upsert_intervals,
+    upsert_pit_stops,
+    upsert_race_control,
+    upsert_weather,
+)
+from app.ingestion.openf1_store import (
+    load_season_races,
+    loaded_session_result_keys,
+    match_meetings_to_races,
+    replace_session_entries,
+    replace_session_results,
+    upsert_meeting_links,
+    upsert_sessions,
+)
+from app.ingestion.openf1_telemetry_store import (
+    driver_entity_map,
+    telemetry_loaded_session_keys,
+    upsert_laps,
+    upsert_positions,
+    upsert_stints,
+)
 
 
 async def _audit(session, *, dataset: str, season: int, records_seen: int, records_written: int, metadata: dict[str, object] | None = None) -> None:

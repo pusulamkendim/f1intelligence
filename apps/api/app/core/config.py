@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     source_http_read_timeout_seconds: float = Field(default=90.0, gt=0)
     source_http_retries: int = Field(default=3, ge=1, le=10)
     source_http_retry_backoff_seconds: float = Field(default=2.0, ge=0)
+    editorial_source_min_interval_seconds: float = Field(default=0.5, ge=0)
     openf1_min_interval_seconds: float = Field(default=2.1, ge=0.1)
     fia_press_release_feed_url: str = "https://www.fia.com/rss/press-release"
     fia_documents_season_url: str = (

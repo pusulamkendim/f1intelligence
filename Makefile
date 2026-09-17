@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia ingest-fia-docs ingest-formula1 ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingest-fia ingest-fia-docs ingest-formula1 ingest-sources list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -46,6 +46,12 @@ ingest-fia-docs: ingestion-setup
 
 ingest-formula1: ingestion-setup
 	cd apps/api && uv run python -m app.ingestion.run_formula1 --limit $${LIMIT:-25} --pages $${PAGES:-3}
+
+ingest-sources: ingestion-setup
+	cd apps/api && uv run python -m app.ingestion.run_sources $${SOURCE:+--source $$SOURCE} --limit $${LIMIT:-20}
+
+list-sources:
+	cd apps/api && uv run python -m app.ingestion.run_sources --list-sources
 
 ingest-jolpica: ingestion-setup
 	cd apps/api && uv run python -m app.ingestion.run_jolpica --season $${SEASON:-2026} $${ROUND:+--round $$ROUND}

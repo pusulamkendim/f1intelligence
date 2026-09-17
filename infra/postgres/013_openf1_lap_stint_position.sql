@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS session_laps (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid NOT NULL REFERENCES race_sessions(id) ON DELETE CASCADE,
-    driver_id uuid REFERENCES drivers(id),
+    driver_entity_id uuid REFERENCES entities(id) ON DELETE SET NULL,
     provider text NOT NULL,
     provider_session_key bigint NOT NULL,
     provider_driver_number integer NOT NULL,
@@ -19,12 +19,12 @@ CREATE TABLE IF NOT EXISTS session_laps (
     UNIQUE (provider, provider_session_key, provider_driver_number, lap_number)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_laps_session_driver ON session_laps(session_id, driver_id, lap_number);
+CREATE INDEX IF NOT EXISTS idx_session_laps_session_driver ON session_laps(session_id, driver_entity_id, lap_number);
 
 CREATE TABLE IF NOT EXISTS session_stints (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid NOT NULL REFERENCES race_sessions(id) ON DELETE CASCADE,
-    driver_id uuid REFERENCES drivers(id),
+    driver_entity_id uuid REFERENCES entities(id) ON DELETE SET NULL,
     provider text NOT NULL,
     provider_session_key bigint NOT NULL,
     provider_driver_number integer NOT NULL,
@@ -40,12 +40,12 @@ CREATE TABLE IF NOT EXISTS session_stints (
     UNIQUE (provider, provider_session_key, provider_driver_number, stint_number)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_stints_session_driver ON session_stints(session_id, driver_id, stint_number);
+CREATE INDEX IF NOT EXISTS idx_session_stints_session_driver ON session_stints(session_id, driver_entity_id, stint_number);
 
 CREATE TABLE IF NOT EXISTS session_positions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid NOT NULL REFERENCES race_sessions(id) ON DELETE CASCADE,
-    driver_id uuid REFERENCES drivers(id),
+    driver_entity_id uuid REFERENCES entities(id) ON DELETE SET NULL,
     provider text NOT NULL,
     provider_session_key bigint NOT NULL,
     provider_driver_number integer NOT NULL,
@@ -58,4 +58,4 @@ CREATE TABLE IF NOT EXISTS session_positions (
     UNIQUE (provider, provider_session_key, provider_driver_number, observed_at)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_positions_session_driver_time ON session_positions(session_id, driver_id, observed_at);
+CREATE INDEX IF NOT EXISTS idx_session_positions_session_driver_time ON session_positions(session_id, driver_entity_id, observed_at);

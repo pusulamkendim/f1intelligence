@@ -36,10 +36,10 @@ async def upsert_laps(session: AsyncSession, *, session_id: Any, session_key: in
     fetched_at = datetime.now(UTC)
     for row in rows:
         await session.execute(text("""
-            INSERT INTO session_laps (session_id, driver_id, provider, provider_session_key, provider_driver_number, lap_number, lap_duration_seconds, is_pit_out_lap, started_at, source_url, source_timestamp, fetched_at, raw_payload)
-            VALUES (:session_id, :driver_id, :provider, :session_key, :driver_number, :lap_number, :duration, :pit_out, :started_at, :source_url, :source_timestamp, :fetched_at, CAST(:raw_payload AS jsonb))
-            ON CONFLICT (provider, provider_session_key, provider_driver_number, lap_number) DO UPDATE SET driver_id=EXCLUDED.driver_id, lap_duration_seconds=EXCLUDED.lap_duration_seconds, is_pit_out_lap=EXCLUDED.is_pit_out_lap, started_at=EXCLUDED.started_at, source_timestamp=EXCLUDED.source_timestamp, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
-        """), {"session_id": session_id, "driver_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "lap_number": row.lap_number, "duration": row.lap_duration_seconds, "pit_out": row.is_pit_out_lap, "started_at": row.started_at, "source_url": f"https://api.openf1.org/v1/laps?session_key={session_key}", "source_timestamp": row.started_at, "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
+            INSERT INTO session_laps (session_id, driver_entity_id, provider, provider_session_key, provider_driver_number, lap_number, lap_duration_seconds, is_pit_out_lap, started_at, source_url, source_timestamp, fetched_at, raw_payload)
+            VALUES (:session_id, :driver_entity_id, :provider, :session_key, :driver_number, :lap_number, :duration, :pit_out, :started_at, :source_url, :source_timestamp, :fetched_at, CAST(:raw_payload AS jsonb))
+            ON CONFLICT (provider, provider_session_key, provider_driver_number, lap_number) DO UPDATE SET driver_entity_id=EXCLUDED.driver_entity_id, lap_duration_seconds=EXCLUDED.lap_duration_seconds, is_pit_out_lap=EXCLUDED.is_pit_out_lap, started_at=EXCLUDED.started_at, source_timestamp=EXCLUDED.source_timestamp, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
+        """), {"session_id": session_id, "driver_entity_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "lap_number": row.lap_number, "duration": row.lap_duration_seconds, "pit_out": row.is_pit_out_lap, "started_at": row.started_at, "source_url": f"https://api.openf1.org/v1/laps?session_key={session_key}", "source_timestamp": row.started_at, "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
     return len(rows)
 
 
@@ -47,10 +47,10 @@ async def upsert_stints(session: AsyncSession, *, session_id: Any, session_key: 
     fetched_at = datetime.now(UTC)
     for row in rows:
         await session.execute(text("""
-            INSERT INTO session_stints (session_id, driver_id, provider, provider_session_key, provider_driver_number, stint_number, lap_start, lap_end, compound, tyre_age_at_start, source_url, fetched_at, raw_payload)
-            VALUES (:session_id, :driver_id, :provider, :session_key, :driver_number, :stint_number, :lap_start, :lap_end, :compound, :tyre_age, :source_url, :fetched_at, CAST(:raw_payload AS jsonb))
-            ON CONFLICT (provider, provider_session_key, provider_driver_number, stint_number) DO UPDATE SET driver_id=EXCLUDED.driver_id, lap_start=EXCLUDED.lap_start, lap_end=EXCLUDED.lap_end, compound=EXCLUDED.compound, tyre_age_at_start=EXCLUDED.tyre_age_at_start, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
-        """), {"session_id": session_id, "driver_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "stint_number": row.stint_number, "lap_start": row.lap_start, "lap_end": row.lap_end, "compound": row.compound, "tyre_age": row.tyre_age_at_start, "source_url": f"https://api.openf1.org/v1/stints?session_key={session_key}", "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
+            INSERT INTO session_stints (session_id, driver_entity_id, provider, provider_session_key, provider_driver_number, stint_number, lap_start, lap_end, compound, tyre_age_at_start, source_url, fetched_at, raw_payload)
+            VALUES (:session_id, :driver_entity_id, :provider, :session_key, :driver_number, :stint_number, :lap_start, :lap_end, :compound, :tyre_age, :source_url, :fetched_at, CAST(:raw_payload AS jsonb))
+            ON CONFLICT (provider, provider_session_key, provider_driver_number, stint_number) DO UPDATE SET driver_entity_id=EXCLUDED.driver_entity_id, lap_start=EXCLUDED.lap_start, lap_end=EXCLUDED.lap_end, compound=EXCLUDED.compound, tyre_age_at_start=EXCLUDED.tyre_age_at_start, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
+        """), {"session_id": session_id, "driver_entity_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "stint_number": row.stint_number, "lap_start": row.lap_start, "lap_end": row.lap_end, "compound": row.compound, "tyre_age": row.tyre_age_at_start, "source_url": f"https://api.openf1.org/v1/stints?session_key={session_key}", "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
     return len(rows)
 
 
@@ -58,8 +58,8 @@ async def upsert_positions(session: AsyncSession, *, session_id: Any, session_ke
     fetched_at = datetime.now(UTC)
     for row in rows:
         await session.execute(text("""
-            INSERT INTO session_positions (session_id, driver_id, provider, provider_session_key, provider_driver_number, observed_at, position, source_url, source_timestamp, fetched_at, raw_payload)
-            VALUES (:session_id, :driver_id, :provider, :session_key, :driver_number, :observed_at, :position, :source_url, :observed_at, :fetched_at, CAST(:raw_payload AS jsonb))
-            ON CONFLICT (provider, provider_session_key, provider_driver_number, observed_at) DO UPDATE SET driver_id=EXCLUDED.driver_id, position=EXCLUDED.position, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
-        """), {"session_id": session_id, "driver_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "observed_at": row.observed_at, "position": row.position, "source_url": f"https://api.openf1.org/v1/position?session_key={session_key}", "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
+            INSERT INTO session_positions (session_id, driver_entity_id, provider, provider_session_key, provider_driver_number, observed_at, position, source_url, source_timestamp, fetched_at, raw_payload)
+            VALUES (:session_id, :driver_entity_id, :provider, :session_key, :driver_number, :observed_at, :position, :source_url, :observed_at, :fetched_at, CAST(:raw_payload AS jsonb))
+            ON CONFLICT (provider, provider_session_key, provider_driver_number, observed_at) DO UPDATE SET driver_entity_id=EXCLUDED.driver_entity_id, position=EXCLUDED.position, fetched_at=EXCLUDED.fetched_at, raw_payload=EXCLUDED.raw_payload
+        """), {"session_id": session_id, "driver_entity_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "observed_at": row.observed_at, "position": row.position, "source_url": f"https://api.openf1.org/v1/position?session_key={session_key}", "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
     return len(rows)

@@ -6,7 +6,13 @@ from app.ingestion.editorial_sources import (
     parse_article_html,
     parse_feed,
 )
-from app.ingestion.source_registry import SOURCE_BY_KEY, SOURCES
+from app.ingestion.source_registry import (
+    ALL_SOURCES,
+    DISABLED_SOURCE_REASONS,
+    DISABLED_SOURCES,
+    SOURCE_BY_KEY,
+    SOURCES,
+)
 
 
 def test_rss_parser_extracts_metadata_without_full_article_fetch() -> None:
@@ -121,15 +127,56 @@ def test_generic_article_parser_prefers_json_ld() -> None:
 
 
 def test_registry_covers_editorial_team_and_community_classes() -> None:
-    keys = [source.key for source in SOURCES]
+    keys = [source.key for source in ALL_SOURCES]
     assert len(keys) == len(set(keys))
     assert set(source.source_class for source in SOURCES) == {
         "independent_editorial",
         "first_party_team",
         "community_signal",
     }
-    team_sources = [source for source in SOURCES if source.source_class == "first_party_team"]
+    team_sources = [
+        source for source in ALL_SOURCES if source.source_class == "first_party_team"
+    ]
     assert len(team_sources) == 11
+    assert len({source.team_slug for source in team_sources}) == 11
     assert all(source.team_slug for source in team_sources)
     assert SOURCE_BY_KEY["autosport_f1"].mode == "rss"
     assert SOURCE_BY_KEY["reddit_formula1"].source_class == "community_signal"
+
+
+def test_live_registry_corrections_filter_known_noise() -> None:
+    mclaren = SOURCE_BY_KEY["team_mclaren"]
+    assert discover_listing_urls(
+        '<a href="/racing/formula-1/2026/schedule/">Schedule</a>'
+        '<a href="/racing/formula-1/2026/spanish-grand-prix/race-report/">Race</a>',
+        mclaren,
+    ) == ["https://www.mclaren.com/racing/formula-1/2026/spanish-grand-prix/race-report"]
+
+    williams = SOURCE_BY_KEY["team_williams"]
+    assert discover_listing_urls(
+        '<a href="/articles/11111111-1111-1111-1111-111111111111/'
+        'williams-f1-team-academy-driver-formula-3-2027">Academy</a>'
+        '<a href="/articles/22222222-2222-2222-2222-222222222222/'
+        'spanish-grand-prix-race-report">Race</a>',
+        williams,
+    ) == [
+        "https://www.williamsf1.com/articles/22222222-2222-2222-2222-222222222222/"
+        "spanish-grand-prix-race-report"
+    ]
+
+    aston = SOURCE_BY_KEY["team_aston_martin"]
+    assert discover_listing_urls(
+        '<a href="/en-GB/news/announcement">Announcement category</a>'
+        '<a href="/en-GB/news/spanish-grand-prix-race-report">Race</a>',
+        aston,
+    ) == ["https://www.astonmartinf1.com/en-GB/news/spanish-grand-prix-race-report"]
+
+
+def test_failed_live_endpoints_are_explicitly_disabled() -> None:
+    disabled_keys = {source.key for source in DISABLED_SOURCES}
+    assert disabled_keys == {"team_ferrari", "team_cadillac"}
+    assert "403" in DISABLED_SOURCE_REASONS["team_ferrari"]
+    assert "403" in DISABLED_SOURCE_REASONS["team_cadillac"]
+    assert SOURCE_BY_KEY["team_red_bull"].discovery_url == "https://www.redbullracing.com/int-en"
+    assert SOURCE_BY_KEY["team_racing_bulls"].provider == "visacashapprb.com"
+    assert SOURCE_BY_KEY["team_audi"].discovery_url.endswith("audi-formula-racing-gmbh-17953")

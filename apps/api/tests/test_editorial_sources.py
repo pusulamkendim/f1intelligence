@@ -126,7 +126,7 @@ def test_generic_article_parser_prefers_json_ld() -> None:
     assert item.author == "Team Media"
 
 
-def test_generic_article_parser_falls_back_to_h1_then_document_title() -> None:
+def test_generic_article_parser_prefers_document_title_over_malformed_h1() -> None:
     source = EditorialSource(
         key="team_alpine",
         provider="alpinef1.com",
@@ -137,21 +137,21 @@ def test_generic_article_parser_falls_back_to_h1_then_document_title() -> None:
     html = """
     <html lang="en">
       <head>
-        <title>Spanish Grand Prix recap | Alpine F1 Team</title>
-        <link rel="canonical" href="https://www.alpinef1.com/news/spanish-grand-prix-recap" />
+        <title>Mike Elliott joins as Chief Technical Officer</title>
+        <link rel="canonical" href="https://www.alpinef1.com/news/mike-elliott-joins-as-chief-technical-officer" />
       </head>
-      <body><h1>Spanish Grand Prix recap</h1></body>
+      <body><h1>BWT Alpine Formula One Team today announces that Mike Elliott is joining the team as Chief Technical Officer and will lead the technical organisation at Enstone.</h1></body>
     </html>
     """
 
     item = parse_article_html(
         html,
-        requested_url="https://www.alpinef1.com/news/spanish-grand-prix-recap",
+        requested_url="https://www.alpinef1.com/news/mike-elliott-joins-as-chief-technical-officer",
         source=source,
     )
 
-    assert item.title == "Spanish Grand Prix recap"
-    assert item.raw_metadata["title_fallback"] == "h1"
+    assert item.title == "Mike Elliott joins as Chief Technical Officer"
+    assert item.raw_metadata["title_fallback"] == "document_title"
 
 
 def test_registry_covers_editorial_team_and_community_classes() -> None:
@@ -176,6 +176,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
     mclaren = SOURCE_BY_KEY["team_mclaren"]
     assert discover_listing_urls(
         '<a href="/racing/formula-1/standings">Standings</a>'
+        '<a href="/racing/formula-1/f1-academy">F1 Academy</a>'
         '<a href="/racing/formula-1/2026/schedule/">Schedule</a>'
         '<a href="/racing/formula-1/2026/spanish-grand-prix/race-report/">Race</a>',
         mclaren,
@@ -184,6 +185,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
     red_bull = SOURCE_BY_KEY["team_red_bull"]
     assert discover_listing_urls(
         '<a href="/int-en/races">Calendar</a>'
+        '<a href="/int-en/my-paddock">Paddock</a>'
         '<a href="/int-en/races/spanish-grand-prix/race-report">Race story</a>'
         '<a href="/int-en/madrid-on-rails-2026">Story</a>',
         red_bull,
@@ -195,6 +197,7 @@ def test_live_registry_corrections_filter_known_noise() -> None:
     racing_bulls = SOURCE_BY_KEY["team_racing_bulls"]
     assert discover_listing_urls(
         '<a href="/int-en/the-garage">Garage</a>'
+        '<a href="/int-en/creator-platform">Creator platform</a>'
         '<a href="/int-en/2026-driver-line-up-announcement">Story</a>',
         racing_bulls,
     ) == ["https://www.visacashapprb.com/int-en/2026-driver-line-up-announcement"]
@@ -213,11 +216,14 @@ def test_live_registry_corrections_filter_known_noise() -> None:
 
     aston = SOURCE_BY_KEY["team_aston_martin"]
     assert discover_listing_urls(
-        '<a href="/en-GB/news/007">007 category</a>'
-        '<a href="/en-GB/news/announcement">Announcement category</a>'
-        '<a href="/en-GB/news/spanish-grand-prix-race-report">Race</a>',
+        '<a href="/en-GB/news/feature">Feature category</a>'
+        '<a href="/en-GB/news/feature/some-assembly-required">Feature article</a>'
+        '<a href="/en-GB/news/announcement/f1-2027-calendar-revealed">Announcement article</a>',
         aston,
-    ) == ["https://www.astonmartinf1.com/en-GB/news/spanish-grand-prix-race-report"]
+    ) == [
+        "https://www.astonmartinf1.com/en-GB/news/feature/some-assembly-required",
+        "https://www.astonmartinf1.com/en-GB/news/announcement/f1-2027-calendar-revealed",
+    ]
 
 
 def test_failed_live_endpoints_are_explicitly_disabled() -> None:

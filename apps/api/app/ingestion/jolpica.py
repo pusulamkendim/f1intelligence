@@ -55,6 +55,34 @@ class JolpicaConstructorStanding:
     nationality: str | None
 
 
+@dataclass(frozen=True)
+class JolpicaRaceResult:
+    position: int | None
+    position_text: str
+    points: Decimal
+    driver_id: str
+    constructor_id: str | None
+    car_number: int | None
+    grid_position: int | None
+    laps: int | None
+    status: str | None
+    finish_time: str | None
+    fastest_lap_rank: int | None
+    fastest_lap_number: int | None
+    fastest_lap_time: str | None
+
+
+@dataclass(frozen=True)
+class JolpicaQualifyingResult:
+    position: int
+    driver_id: str
+    constructor_id: str | None
+    car_number: int | None
+    q1: str | None
+    q2: str | None
+    q3: str | None
+
+
 class JolpicaClient:
     def __init__(self, client: httpx.AsyncClient, base_url: str = JOLPICA_BASE_URL) -> None:
         self.client = client
@@ -78,13 +106,31 @@ class JolpicaClient:
         self, season: int, round_number: int | None = None
     ) -> list[JolpicaConstructorStanding]:
         scope = f"{season}/{round_number}" if round_number is not None else str(season)
-        return parse_constructor_standings(await self._get(f"{scope}/constructorstandings.json"))
+        return parse_constructor_standings(
+            await self._get(f"{scope}/constructorstandings.json")
+        )
+
+    async def race_results(self, season: int, round_number: int) -> list[JolpicaRaceResult]:
+        return parse_race_results(await self._get(f"{season}/{round_number}/results.json"))
+
+    async def qualifying_results(
+        self, season: int, round_number: int
+    ) -> list[JolpicaQualifyingResult]:
+        return parse_qualifying_results(
+            await self._get(f"{season}/{round_number}/qualifying.json")
+        )
 
 
 def _decimal(value: Any) -> Decimal | None:
     if value in (None, ""):
         return None
     return Decimal(str(value))
+
+
+def _int(value: Any) -> int | None:
+    if value in (None, "", "\\N"):
+        return None
+    return int(value)
 
 
 def _utc_datetime(date_value: str, time_value: str | None) -> datetime | None:
@@ -145,7 +191,9 @@ def parse_driver_standings(payload: dict[str, Any]) -> list[JolpicaDriverStandin
                 else None
             ),
             code=row["Driver"].get("code"),
-            constructor_ids=tuple(item["constructorId"] for item in row.get("Constructors", [])),
+            constructor_ids=tuple(
+                item["constructorId"] for item in row.get("Constructors", [])
+            ),
         )
         for row in standings.get("DriverStandings", [])
     ]
@@ -165,4 +213,54 @@ def parse_constructor_standings(payload: dict[str, Any]) -> list[JolpicaConstruc
             nationality=row["Constructor"].get("nationality"),
         )
         for row in standings.get("ConstructorStandings", [])
+    ]
+
+
+def _race_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    races = payload["MRData"]["RaceTable"].get("Races", [])
+    return races[0] if races else None
+
+
+def parse_race_results(payload: dict[str, Any]) -> list[JolpicaRaceResult]:
+    race = _race_payload(payload)
+    if race is None:
+        return []
+    parsed: list[JolpicaRaceResult] = []
+    for row in race.get("Results", []):
+        fastest = row.get("FastestLap", {})
+        parsed.append(
+            JolpicaRaceResult(
+                position=_int(row.get("position")),
+                position_text=row.get("positionText", ""),
+                points=Decimal(row.get("points", "0")),
+                driver_id=row["Driver"]["driverId"],
+                constructor_id=row.get("Constructor", {}).get("constructorId"),
+                car_number=_int(row.get("number")),
+                grid_position=_int(row.get("grid")),
+                laps=_int(row.get("laps")),
+                status=row.get("status"),
+                finish_time=row.get("Time", {}).get("time"),
+                fastest_lap_rank=_int(fastest.get("rank")),
+                fastest_lap_number=_int(fastest.get("lap")),
+                fastest_lap_time=fastest.get("Time", {}).get("time"),
+            )
+        )
+    return parsed
+
+
+def parse_qualifying_results(payload: dict[str, Any]) -> list[JolpicaQualifyingResult]:
+    race = _race_payload(payload)
+    if race is None:
+        return []
+    return [
+        JolpicaQualifyingResult(
+            position=int(row["position"]),
+            driver_id=row["Driver"]["driverId"],
+            constructor_id=row.get("Constructor", {}).get("constructorId"),
+            car_number=_int(row.get("number")),
+            q1=row.get("Q1"),
+            q2=row.get("Q2"),
+            q3=row.get("Q3"),
+        )
+        for row in race.get("QualifyingResults", [])
     ]

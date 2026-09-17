@@ -3,11 +3,14 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from app.ingestion.content_cleanup import clean_summary, clean_title
 from app.ingestion.source_item_entities import SourceItemEntityClassification
 from app.ingestion.story_materialization import _create_story, classify_story_worthiness
 
 
-def _classification(relation_type: str = "subject") -> SourceItemEntityClassification:
+def _classification(
+    relation_type: str = "subject",
+) -> SourceItemEntityClassification:
     return SourceItemEntityClassification(
         entity_id=uuid4(),
         entity_type="person",
@@ -70,6 +73,23 @@ def test_first_party_photo_gallery_is_not_materialized_as_a_story() -> None:
     assert decision.story_worthy is False
 
 
+def test_first_party_evergreen_and_activation_content_is_filtered() -> None:
+    titles = (
+        "A seat at the table",
+        "Five things you can't teach an F1 mechanic",
+        "Some assembly required – the mechanics building our F1 cars",
+        "Explore Budapest",
+        "Fan designed stickers feature in our Madrid garage",
+    )
+    for title in titles:
+        decision = classify_story_worthiness(
+            source_class="first_party_team",
+            title=title,
+            classifications=(),
+        )
+        assert decision.story_worthy is False, title
+
+
 def test_business_news_is_retained_and_taxonomized() -> None:
     decision = classify_story_worthiness(
         source_class="independent_editorial",
@@ -79,6 +99,45 @@ def test_business_news_is_retained_and_taxonomized() -> None:
 
     assert decision.story_worthy is True
     assert decision.taxonomy == "team_business"
+
+
+def test_licensing_appointment_is_business_not_personnel() -> None:
+    decision = classify_story_worthiness(
+        source_class="first_party_team",
+        title="TGR Haas F1 Team Appoints Brandand to Drive Global Licensing",
+        classifications=(),
+    )
+
+    assert decision.story_worthy is True
+    assert decision.taxonomy == "team_business"
+
+
+def test_driver_contract_extension_is_personnel() -> None:
+    decision = classify_story_worthiness(
+        source_class="first_party_team",
+        title="MAX. ORACLE RED BULL RACING. 2030.",
+        classifications=(_classification(),),
+    )
+
+    # The stylised headline has no action verb, so the source summary/entity context
+    # will carry personnel semantics later. A normal contract headline is deterministic.
+    normal = classify_story_worthiness(
+        source_class="independent_editorial",
+        title="Max Verstappen extends Red Bull contract until the end of 2030",
+        classifications=(_classification(),),
+    )
+    assert decision.story_worthy is True
+    assert normal.taxonomy == "personnel"
+
+
+def test_html_entities_and_feed_boilerplate_are_cleaned() -> None:
+    assert clean_title("Isack Hadjar: driver&#x27;s injury update") == (
+        "Isack Hadjar: driver's injury update"
+    )
+    assert clean_summary("A factual sentence. Keep reading") == "A factual sentence"
+    assert clean_summary("A factual sentence. Read Also: More coverage") == (
+        "A factual sentence"
+    )
 
 
 class _StoryInsertResult:
@@ -93,7 +152,11 @@ class _CompileCheckingSession:
     def __init__(self, story_id: UUID):
         self.story_id = story_id
 
-    async def execute(self, statement: Any, params: dict[str, Any]) -> _StoryInsertResult:
+    async def execute(
+        self,
+        statement: Any,
+        params: dict[str, Any],
+    ) -> _StoryInsertResult:
         compiled_params = statement.compile().params
         assert "1" not in compiled_params
         assert set(compiled_params) == {

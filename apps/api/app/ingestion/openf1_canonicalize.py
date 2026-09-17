@@ -178,8 +178,26 @@ async def reconcile_unresolved_session_drivers(session: AsyncSession, season: in
         )
         resolved_names += 1
 
-    # Propagate canonical driver links to rows already persisted before reconciliation.
-    for table in ("session_results", "session_laps", "session_stints", "session_positions"):
+    await session.execute(
+        text(
+            """
+            UPDATE session_results target
+            SET driver_entity_id = se.driver_entity_id
+            FROM session_entries se, race_sessions rs, races r
+            WHERE target.session_id = se.session_id
+              AND target.provider = :provider
+              AND target.driver_entity_id IS NULL
+              AND target.driver_number = se.driver_number
+              AND se.session_id = rs.id
+              AND rs.race_id = r.id
+              AND r.season = :season
+              AND se.driver_entity_id IS NOT NULL
+            """
+        ),
+        {"provider": PROVIDER, "season": season},
+    )
+
+    for table in ("session_laps", "session_stints", "session_positions"):
         await session.execute(
             text(
                 f"""

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
+from time import monotonic
 from typing import Any
 
 import httpx
 
 JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1"
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -84,14 +88,69 @@ class JolpicaQualifyingResult:
 
 
 class JolpicaClient:
-    def __init__(self, client: httpx.AsyncClient, base_url: str = JOLPICA_BASE_URL) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str = JOLPICA_BASE_URL,
+        *,
+        max_retries: int = 4,
+        retry_backoff_seconds: float = 2.0,
+        min_interval_seconds: float = 1.0,
+    ) -> None:
         self.client = client
         self.base_url = base_url.rstrip("/")
+        self.max_retries = max_retries
+        self.retry_backoff_seconds = retry_backoff_seconds
+        self.min_interval_seconds = min_interval_seconds
+        self._last_request_at: float | None = None
+
+    async def _pace(self) -> None:
+        if self.min_interval_seconds <= 0:
+            return
+        if self._last_request_at is not None:
+            remaining = self.min_interval_seconds - (monotonic() - self._last_request_at)
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+        self._last_request_at = monotonic()
+
+    def _retry_delay(self, response: httpx.Response | None, attempt: int) -> float:
+        if response is not None:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    return max(0.0, float(retry_after))
+                except ValueError:
+                    try:
+                        retry_at = parsedate_to_datetime(retry_after)
+                        if retry_at.tzinfo is None:
+                            retry_at = retry_at.replace(tzinfo=UTC)
+                        return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
+                    except (TypeError, ValueError, OverflowError):
+                        pass
+        return self.retry_backoff_seconds * (2**attempt)
 
     async def _get(self, path: str) -> dict[str, Any]:
-        response = await self.client.get(f"{self.base_url}/{path.lstrip('/')}")
-        response.raise_for_status()
-        return response.json()
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        for attempt in range(self.max_retries + 1):
+            await self._pace()
+            response: httpx.Response | None = None
+            try:
+                response = await self.client.get(url)
+            except httpx.RequestError:
+                if attempt >= self.max_retries:
+                    raise
+                await asyncio.sleep(self._retry_delay(None, attempt))
+                continue
+
+            if response.status_code not in RETRYABLE_STATUS_CODES:
+                response.raise_for_status()
+                return response.json()
+
+            if attempt >= self.max_retries:
+                response.raise_for_status()
+            await asyncio.sleep(self._retry_delay(response, attempt))
+
+        raise RuntimeError(f"exhausted retries for {url}")
 
     async def season_calendar(self, season: int) -> list[JolpicaRace]:
         return parse_calendar(await self._get(f"{season}.json"))

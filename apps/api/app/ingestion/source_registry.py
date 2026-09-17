@@ -62,7 +62,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         mode="listing",
         discovery_url="https://www.mclaren.com/racing/formula-1/articles/",
         allowed_hosts=("www.mclaren.com", "mclaren.com"),
-        article_path_pattern=r"^/racing/formula-1/(?!articles/?$).+",
+        article_path_pattern=r"^/racing/formula-1/\d{4}/(?!schedule/?$|standings/?$)[^/]+/?$",
         team_slug="mclaren",
     ),
     EditorialSource(
@@ -80,19 +80,24 @@ SOURCES: tuple[EditorialSource, ...] = (
         provider="ferrari.com",
         source_class="first_party_team",
         mode="listing",
-        discovery_url="https://www.ferrari.com/en-EN/formula1/news",
+        discovery_url="https://www.ferrari.com/en-US/formula1/news",
         allowed_hosts=("www.ferrari.com", "ferrari.com"),
-        article_path_pattern=r"^/en-EN/formula1/articles/.+",
+        article_path_pattern=r"^/en-(?:US|EN)/formula1/articles/.+",
         team_slug="ferrari",
+        enabled=False,
+        disabled_reason="Ferrari returned HTTP 403 to the automated live-ingest runner; keep for manual retest.",
     ),
     EditorialSource(
         key="team_red_bull",
         provider="redbullracing.com",
         source_class="first_party_team",
         mode="listing",
-        discovery_url="https://www.redbullracing.com/int-en/news",
+        discovery_url="https://www.redbullracing.com/int-en",
         allowed_hosts=("www.redbullracing.com", "redbullracing.com"),
-        article_path_pattern=r"^/int-en/(?:news|races)/.+",
+        article_path_pattern=(
+            r"^/int-en/(?:(?!races(?:/|$)|drivers(?:/|$)|our-team(?:/|$)|cars(?:/|$)|"
+            r"collections(?:/|$)|projects(?:/|$))[^/]+/?|races/[^/]+/.+)$"
+        ),
         team_slug="red-bull-racing",
     ),
     EditorialSource(
@@ -104,6 +109,8 @@ SOURCES: tuple[EditorialSource, ...] = (
         allowed_hosts=("www.racingbulls.com", "racingbulls.com"),
         article_path_pattern=r"^/en_INT/(?:news|articles)/.+",
         team_slug="racing-bulls",
+        enabled=False,
+        disabled_reason="Official Racing Bulls endpoint was unreachable from the live-ingest runner; source needs a stable official discovery endpoint.",
     ),
     EditorialSource(
         key="team_alpine",
@@ -112,7 +119,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         mode="listing",
         discovery_url="https://www.alpinef1.com/news",
         allowed_hosts=("www.alpinef1.com", "alpinef1.com"),
-        article_path_pattern=r"^/news/.+",
+        article_path_pattern=r"^/news/(?!page(?:/|$))[^/]+/?$",
         team_slug="alpine",
     ),
     EditorialSource(
@@ -140,7 +147,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         provider="williamsf1.com",
         source_class="first_party_team",
         mode="listing",
-        discovery_url="https://www.williamsf1.com/formula-1/seasons/2026/overview",
+        discovery_url="https://www.williamsf1.com/news",
         allowed_hosts=("www.williamsf1.com", "williamsf1.com"),
         article_path_pattern=r"^/articles/[0-9a-f-]+/.+",
         team_slug="williams",
@@ -152,7 +159,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         mode="listing",
         discovery_url="https://www.astonmartinf1.com/en-GB/news",
         allowed_hosts=("www.astonmartinf1.com", "astonmartinf1.com"),
-        article_path_pattern=r"^/en-GB/news/.+",
+        article_path_pattern=r"^/en-GB/news/[^/]+/[^/]+/?$",
         team_slug="aston-martin",
     ),
     EditorialSource(
@@ -164,6 +171,8 @@ SOURCES: tuple[EditorialSource, ...] = (
         allowed_hosts=("www.cadillacf1team.com", "cadillacf1team.com"),
         article_path_pattern=r"^/news/.+",
         team_slug="cadillac",
+        enabled=False,
+        disabled_reason="Cadillac returned HTTP 403 to the automated live-ingest runner; keep for manual retest.",
     ),
     # Community signals are deliberately not treated as factual/editorial evidence.
     EditorialSource(
@@ -185,3 +194,4 @@ SOURCES: tuple[EditorialSource, ...] = (
 )
 
 SOURCE_BY_KEY = {source.key: source for source in SOURCES}
+ACTIVE_SOURCES = tuple(source for source in SOURCES if source.enabled)

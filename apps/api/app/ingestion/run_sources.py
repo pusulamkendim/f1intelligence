@@ -22,9 +22,15 @@ from app.ingestion.source_item_store import (
     load_entity_aliases,
     persist_source_item_with_entities,
 )
-from app.ingestion.source_registry import SOURCE_BY_KEY, SOURCES
+from app.ingestion.source_registry import (
+    DISABLED_SOURCE_REASONS,
+    DISABLED_SOURCES,
+    SOURCE_BY_KEY,
+    SOURCES,
+)
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+COMMUNITY_SOURCE_GAP_SECONDS = 5.0
 logger = logging.getLogger(__name__)
 
 
@@ -131,10 +137,16 @@ async def _fetch_source_items(
         items = parse_feed(response.text, source)[:limit]
         return items, len(items), 0
 
-    urls = discover_listing_urls(response.text, source)[:limit]
+    urls = discover_listing_urls(response.text, source)
     items: list[EditorialItem] = []
     failures = 0
-    for url in urls:
+    # Parse beyond the requested item count because some listing pages still expose
+    # stale/category URLs that fail metadata extraction. Stop as soon as enough
+    # valid articles have been collected.
+    candidate_limit = min(len(urls), max(limit * 4, limit))
+    for url in urls[:candidate_limit]:
+        if len(items) >= limit:
+            break
         try:
             article_response = await _get_with_retries(client, url)
             items.append(
@@ -199,8 +211,12 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
 
 async def ingest(sources: list[EditorialSource], *, limit: int) -> IngestionStats:
     output = IngestionStats()
+    previous_was_community = False
     for source in sources:
+        if previous_was_community and source.source_class == "community_signal":
+            await asyncio.sleep(COMMUNITY_SOURCE_GAP_SECONDS)
         output.sources.append(await ingest_source(source, limit=limit))
+        previous_was_community = source.source_class == "community_signal"
     return output
 
 
@@ -210,6 +226,12 @@ def _selected_sources(keys: list[str]) -> list[EditorialSource]:
     unknown = sorted(set(keys).difference(SOURCE_BY_KEY))
     if unknown:
         raise SystemExit(f"unknown source key(s): {', '.join(unknown)}")
+    disabled = [key for key in keys if key in DISABLED_SOURCE_REASONS]
+    if disabled:
+        details = "; ".join(
+            f"{key}: {DISABLED_SOURCE_REASONS[key]}" for key in disabled
+        )
+        raise SystemExit(f"disabled source(s): {details}")
     return [SOURCE_BY_KEY[key] for key in keys]
 
 
@@ -219,7 +241,7 @@ def parse_args() -> argparse.Namespace:
         "--source",
         action="append",
         default=[],
-        help="source key to ingest; repeatable; defaults to all",
+        help="source key to ingest; repeatable; defaults to all active sources",
     )
     parser.add_argument("--limit", type=int, default=20, help="maximum items per source")
     parser.add_argument("--list-sources", action="store_true", help="print configured source keys")
@@ -229,7 +251,13 @@ def parse_args() -> argparse.Namespace:
 async def async_main() -> None:
     args = parse_args()
     if args.list_sources:
-        print("\n".join(source.key for source in SOURCES))
+        for source in SOURCES:
+            print(f"{source.key}\tactive")
+        for source in DISABLED_SOURCES:
+            print(
+                f"{source.key}\tdisabled\t"
+                f"{DISABLED_SOURCE_REASONS[source.key]}"
+            )
         return
     stats = await ingest(_selected_sources(args.source), limit=max(1, args.limit))
     print(

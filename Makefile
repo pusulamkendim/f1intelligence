@@ -14,8 +14,15 @@ infra-down:
 seed-demo:
 	docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/seed_demo.sql
 
+# Bootstrap migrations are historical SQL scripts, not a replay-safe migration engine.
+# Refuse to replay them over an existing schema; ingestion targets below therefore do
+# not depend on this target. Apply new incremental migrations explicitly when added.
 ingestion-setup:
-	@for migration in \
+	@if docker compose --env-file .env exec -T postgres sh -lc 'psql -At -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "SELECT to_regclass('"'"'public.teams'"'"') IS NOT NULL"' | grep -qx t; then \
+		echo "Database schema already initialized; skipping historical migration replay."; \
+		exit 0; \
+	fi; \
+	for migration in \
 		infra/postgres/001_init.sql \
 		infra/postgres/002_seed_demo_story.sql \
 		infra/postgres/003_official_ingestion.sql \
@@ -38,25 +45,25 @@ ingestion-setup:
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
-ingest-fia: ingestion-setup
+ingest-fia:
 	cd apps/api && uv run python -m app.ingestion.run_fia --limit 50
 
-ingest-fia-docs: ingestion-setup
+ingest-fia-docs:
 	cd apps/api && uv run python -m app.ingestion.run_fia_documents --limit 50
 
-ingest-formula1: ingestion-setup
+ingest-formula1:
 	cd apps/api && uv run python -m app.ingestion.run_formula1 --limit $${LIMIT:-25} --pages $${PAGES:-3}
 
-ingest-sources: ingestion-setup
+ingest-sources:
 	cd apps/api && uv run python -m app.ingestion.run_sources $${SOURCE:+--source $$SOURCE} --limit $${LIMIT:-20}
 
 list-sources:
 	cd apps/api && uv run python -m app.ingestion.run_sources --list-sources
 
-ingest-jolpica: ingestion-setup
+ingest-jolpica:
 	cd apps/api && uv run python -m app.ingestion.run_jolpica --season $${SEASON:-2026} $${ROUND:+--round $$ROUND}
 
-ingest-openf1: ingestion-setup
+ingest-openf1:
 	cd apps/api && uv run python -m app.ingestion.run_openf1 --season $${SEASON:-2026}
 
 api-dev:

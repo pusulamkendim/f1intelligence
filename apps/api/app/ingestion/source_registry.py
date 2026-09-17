@@ -69,7 +69,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         allowed_hosts=("www.mclaren.com", "mclaren.com"),
         article_path_pattern=(
             r"^/racing/formula-1/(?!articles/?$)(?!standings/?$)(?!schedule/?$)"
-            r"(?!results/?$)(?!drivers(?:/|$)|team(?:/|$)|car(?:/|$))"
+            r"(?!results/?$)(?!f1-academy(?:/|$))(?!drivers(?:/|$)|team(?:/|$)|car(?:/|$))"
             r"(?!\d{4}/schedule/?$).+"
         ),
         team_slug="mclaren",
@@ -92,9 +92,9 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.redbullracing.com/int-en",
         allowed_hosts=("www.redbullracing.com", "redbullracing.com"),
         article_path_pattern=(
-            r"^/int-en/(?!races/?$)(?!drivers(?:/|$)|partners(?:/|$)|team(?:/|$)|"
-            r"cars(?:/|$)|collections(?:/|$)|experiences(?:/|$)|events(?:/|$)|"
-            r"calendar(?:/|$)|shop(?:/|$)).+"
+            r"^/int-en/(?!races/?$)(?!my-paddock/?$)(?!drivers(?:/|$)|partners(?:/|$)|"
+            r"team(?:/|$)|cars(?:/|$)|collections(?:/|$)|experiences(?:/|$)|"
+            r"events(?:/|$)|calendar(?:/|$)|shop(?:/|$)).+"
         ),
         team_slug="red-bull-racing",
     ),
@@ -106,8 +106,8 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.visacashapprb.com/int-en/news",
         allowed_hosts=("www.visacashapprb.com", "visacashapprb.com"),
         article_path_pattern=(
-            r"^/int-en/(?!news/?$|the-garage/?$|races/?$|calendar/?$|shop/?$|"
-            r"team(?:/|$)|drivers(?:/|$)|car(?:/|$)|partners(?:/|$)|"
+            r"^/int-en/(?!news/?$|the-garage/?$|creator-platform/?$|races/?$|calendar/?$|"
+            r"shop/?$|team(?:/|$)|drivers(?:/|$)|car(?:/|$)|partners(?:/|$)|"
             r"f1-academy(?:/|$)).+"
         ),
         team_slug="racing-bulls",
@@ -162,8 +162,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.astonmartinf1.com/en-GB/news",
         allowed_hosts=("www.astonmartinf1.com", "astonmartinf1.com"),
         article_path_pattern=(
-            r"^/en-GB/news/(?!\d+/?$)(?!announcement/?$|feature/?$|gallery/?$|"
-            r"heritage/?$|esports/?$|on-track/?$)[^/]+/?$"
+            r"^/en-GB/news/(?:announcement|feature|gallery|heritage|esports|on-track)/[^/]+/?$"
         ),
         team_slug="aston-martin",
     ),

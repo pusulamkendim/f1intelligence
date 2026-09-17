@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -36,6 +37,15 @@ class SourceItemRecord:
     raw_metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class TeamContextPerson:
+    entity_id: UUID
+    slug: str
+    display_name: str
+    role: str
+    season: int
+
+
 async def load_entity_aliases(session: AsyncSession) -> list[EntityAlias]:
     result = await session.execute(
         text(
@@ -58,6 +68,76 @@ async def load_entity_aliases(session: AsyncSession) -> list[EntityAlias]:
         )
     )
     return [EntityAlias(**dict(row)) for row in result.mappings().all()]
+
+
+def build_team_context_aliases(
+    people: list[TeamContextPerson],
+) -> list[EntityAlias]:
+    """Build team-scoped first-name aliases only when unambiguous inside that roster.
+
+    These aliases are intentionally never stored globally. A first name such as Carlos,
+    Lando, or Oscar is only usable while classifying content from the person's own
+    first-party team source for the matching roster season.
+    """
+    first_names = [person.display_name.split()[0] for person in people if person.display_name.split()]
+    counts = Counter(name.casefold() for name in first_names)
+    aliases: list[EntityAlias] = []
+    for person in people:
+        parts = person.display_name.split()
+        if not parts:
+            continue
+        first_name = parts[0]
+        if len(first_name) < 3 or counts[first_name.casefold()] != 1:
+            continue
+        aliases.append(
+            EntityAlias(
+                entity_id=person.entity_id,
+                entity_type="person",
+                slug=person.slug,
+                display_name=person.display_name,
+                alias=first_name,
+                alias_type="team_first_name",
+                confidence=93,
+                valid_from_season=person.season,
+                valid_to_season=person.season,
+            )
+        )
+    return aliases
+
+
+async def load_team_context_aliases(
+    session: AsyncSession,
+    *,
+    team_slug: str,
+    season: int | None,
+) -> list[EntityAlias]:
+    result = await session.execute(
+        text(
+            """
+            SELECT
+                e.id AS entity_id,
+                p.slug,
+                p.display_name,
+                tpr.role,
+                tpr.season
+            FROM teams t
+            JOIN team_person_roles tpr ON tpr.team_id = t.id
+            JOIN persons p ON p.id = tpr.person_id
+            JOIN entities e ON e.id = p.entity_id
+            WHERE t.slug = :team_slug
+              AND tpr.season = COALESCE(
+                    :season,
+                    (SELECT max(latest.season)
+                     FROM team_person_roles latest
+                     WHERE latest.team_id = t.id)
+              )
+            ORDER BY p.display_name, tpr.role
+            """
+        ),
+        {"team_slug": team_slug, "season": season},
+    )
+    people = [TeamContextPerson(**dict(row)) for row in result.mappings().all()]
+    return build_team_context_aliases(people)
 
 
 async def upsert_source_item(session: AsyncSession, item: SourceItemRecord) -> UUID:
@@ -142,14 +222,14 @@ async def reconcile_source_item_entities(
     source_item_id: UUID,
     classifications: tuple[SourceItemEntityClassification, ...],
 ) -> int:
-    # Re-ingestion may change title/summary text. Remove only rows owned by the
-    # deterministic classifier; semantic/manual upgrades must survive refreshes.
+    # Re-ingestion may change text or deterministic semantics. Remove every version
+    # owned by our deterministic classifier; LLM/manual upgrades must survive refreshes.
     await session.execute(
         text(
             """
             DELETE FROM source_item_entities
             WHERE source_item_id = :source_item_id
-              AND classification_method = 'deterministic_v1'
+              AND classification_method LIKE 'deterministic_v%'
             """
         ),
         {"source_item_id": source_item_id},

@@ -11,12 +11,9 @@ def test_slugify_driver_name_collapses_provider_whitespace_and_punctuation() -> 
 
 
 def test_same_person_slug_is_independent_of_session_number_or_team() -> None:
-    # OpenF1 numbers are session context, not canonical person identity. Real 2026
-    # examples include Paul Aron (#97 Audi, #61 Alpine) and Ayumu Iwasa
-    # (#36 Red Bull Racing, #90 Racing Bulls).
     observations = [
-        {"full_name": "Paul ARON", "driver_number": 97, "team": "Audi"},
-        {"full_name": "Paul ARON", "driver_number": 61, "team": "Alpine"},
+        {"full_name": "Example DRIVER", "driver_number": 97, "team": "Team A"},
+        {"full_name": "Example DRIVER", "driver_number": 61, "team": "Team B"},
     ]
-    assert {_slugify_driver_name(row["full_name"]) for row in observations} == {"paul-aron"}
+    assert {_slugify_driver_name(row["full_name"]) for row in observations} == {"example-driver"}
     assert {row["driver_number"] for row in observations} == {61, 97}

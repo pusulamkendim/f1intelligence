@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 ARTICLE_PATH_RE = re.compile(r"^/en/latest/article/[^?#]+\.[A-Za-z0-9]+/?$")
 ARTICLE_ID_RE = re.compile(r"\.([A-Za-z0-9]+)$")
 MAX_BODY_EXCERPT_CHARS = 2000
+NON_F1_SECTIONS = {"f2", "f3", "f1 academy"}
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,13 @@ def _external_id(canonical_url: str) -> str:
     return sha256(canonical_url.encode()).hexdigest()
 
 
+def is_formula1_relevant_article(article: Formula1Article) -> bool:
+    if article.section is None:
+        return True
+    normalized = " ".join(article.section.casefold().split())
+    return normalized not in NON_F1_SECTIONS
+
+
 def parse_formula1_article(html_text: str, *, requested_url: str) -> Formula1Article:
     parser = _ArticleMetadataParser()
     parser.feed(html_text)
@@ -209,7 +217,11 @@ def parse_formula1_article(html_text: str, *, requested_url: str) -> Formula1Art
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Formula1.com article has no usable title")
 
-    description = article_node.get("description") or parser.meta.get("description") or parser.meta.get("og:description")
+    description = (
+        article_node.get("description")
+        or parser.meta.get("description")
+        or parser.meta.get("og:description")
+    )
     description = _clean_excerpt(description)
     body_excerpt = _clean_excerpt(article_node.get("articleBody"))
     published_at = _parse_datetime(

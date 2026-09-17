@@ -206,9 +206,15 @@ class _MetadataParser(HTMLParser):
         self.meta: dict[str, str] = {}
         self.canonical_url: str | None = None
         self.language: str | None = None
+        self.document_title: str | None = None
+        self.first_h1: str | None = None
         self._json_ld = False
         self._json_parts: list[str] = []
         self.json_documents: list[Any] = []
+        self._capture_title = False
+        self._title_parts: list[str] = []
+        self._capture_h1 = False
+        self._h1_parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = {key.casefold(): value for key, value in attrs if value is not None}
@@ -225,23 +231,44 @@ class _MetadataParser(HTMLParser):
         elif lower == "script" and "ld+json" in values.get("type", "").casefold():
             self._json_ld = True
             self._json_parts = []
+        elif lower == "title" and self.document_title is None:
+            self._capture_title = True
+            self._title_parts = []
+        elif lower == "h1" and self.first_h1 is None:
+            self._capture_h1 = True
+            self._h1_parts = []
 
     def handle_data(self, data: str) -> None:
         if self._json_ld:
             self._json_parts.append(data)
+        if self._capture_title:
+            self._title_parts.append(data)
+        if self._capture_h1:
+            self._h1_parts.append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.casefold() != "script" or not self._json_ld:
-            return
-        raw = "".join(self._json_parts).strip()
-        self._json_ld = False
-        self._json_parts = []
-        if not raw:
-            return
-        try:
-            self.json_documents.append(json.loads(raw))
-        except json.JSONDecodeError:
-            return
+        lower = tag.casefold()
+        if lower == "script" and self._json_ld:
+            raw = "".join(self._json_parts).strip()
+            self._json_ld = False
+            self._json_parts = []
+            if raw:
+                try:
+                    self.json_documents.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    pass
+        elif lower == "title" and self._capture_title:
+            self._capture_title = False
+            value = " ".join("".join(self._title_parts).split())
+            self._title_parts = []
+            if value:
+                self.document_title = value
+        elif lower == "h1" and self._capture_h1:
+            self._capture_h1 = False
+            value = " ".join("".join(self._h1_parts).split())
+            self._h1_parts = []
+            if value:
+                self.first_h1 = value
 
 
 def _json_nodes(value: Any):
@@ -289,7 +316,13 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
     canonical_url = str(
         parser.canonical_url or node.get("url") or parser.meta.get("og:url") or requested_url
     ).split("?", 1)[0].rstrip("/")
-    title = node.get("headline") or parser.meta.get("og:title") or parser.meta.get("twitter:title")
+    title = (
+        node.get("headline")
+        or parser.meta.get("og:title")
+        or parser.meta.get("twitter:title")
+        or parser.first_h1
+        or parser.document_title
+    )
     if not isinstance(title, str) or not title.strip():
         raise ValueError(f"{source.key} article has no usable title")
 
@@ -323,5 +356,12 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
             "article_section": section,
             "team_slug": source.team_slug,
             "og_type": parser.meta.get("og:type"),
+            "title_fallback": (
+                "h1"
+                if title == parser.first_h1
+                else "document_title"
+                if title == parser.document_title
+                else None
+            ),
         },
     )

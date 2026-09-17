@@ -3,8 +3,9 @@ from __future__ import annotations
 from app.ingestion.editorial_sources import EditorialSource
 
 # Active sources are expected to be fetchable by a normal server-side HTTP client.
-# Sites that explicitly challenge/deny automated HTTP access stay configured below
-# as disabled sources instead of attempting to bypass their controls.
+# Sites that explicitly challenge/deny automated HTTP access or repeatedly rate-limit
+# this environment stay configured below as disabled sources instead of attempting to
+# bypass their controls.
 SOURCES: tuple[EditorialSource, ...] = (
     # Independent editorial coverage.
     EditorialSource(
@@ -67,8 +68,9 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.mclaren.com/racing/formula-1/articles/",
         allowed_hosts=("www.mclaren.com", "mclaren.com"),
         article_path_pattern=(
-            r"^/racing/formula-1/(?!articles/?$)(?!\d{4}/schedule/?$)"
-            r"(?!drivers(?:/|$)|team(?:/|$)|car(?:/|$)).+"
+            r"^/racing/formula-1/(?!articles/?$)(?!standings/?$)(?!schedule/?$)"
+            r"(?!results/?$)(?!drivers(?:/|$)|team(?:/|$)|car(?:/|$))"
+            r"(?!\d{4}/schedule/?$).+"
         ),
         team_slug="mclaren",
     ),
@@ -90,8 +92,9 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.redbullracing.com/int-en",
         allowed_hosts=("www.redbullracing.com", "redbullracing.com"),
         article_path_pattern=(
-            r"^/int-en/(?!drivers(?:/|$)|partners(?:/|$)|team(?:/|$)|cars(?:/|$)|"
-            r"collections(?:/|$)|experiences(?:/|$)|events(?:/|$)).+"
+            r"^/int-en/(?!races/?$)(?!drivers(?:/|$)|partners(?:/|$)|team(?:/|$)|"
+            r"cars(?:/|$)|collections(?:/|$)|experiences(?:/|$)|events(?:/|$)|"
+            r"calendar(?:/|$)|shop(?:/|$)).+"
         ),
         team_slug="red-bull-racing",
     ),
@@ -103,8 +106,9 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.visacashapprb.com/int-en/news",
         allowed_hosts=("www.visacashapprb.com", "visacashapprb.com"),
         article_path_pattern=(
-            r"^/int-en/(?!news/?$|team(?:/|$)|drivers(?:/|$)|car(?:/|$)|"
-            r"partners(?:/|$)|f1-academy(?:/|$)).+"
+            r"^/int-en/(?!news/?$|the-garage/?$|races/?$|calendar/?$|shop/?$|"
+            r"team(?:/|$)|drivers(?:/|$)|car(?:/|$)|partners(?:/|$)|"
+            r"f1-academy(?:/|$)).+"
         ),
         team_slug="racing-bulls",
     ),
@@ -158,8 +162,8 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.astonmartinf1.com/en-GB/news",
         allowed_hosts=("www.astonmartinf1.com", "astonmartinf1.com"),
         article_path_pattern=(
-            r"^/en-GB/news/(?!announcement/?$|feature/?$|gallery/?$|heritage/?$|"
-            r"esports/?$|on-track/?$)[^/]+/?$"
+            r"^/en-GB/news/(?!\d+/?$)(?!announcement/?$|feature/?$|gallery/?$|"
+            r"heritage/?$|esports/?$|on-track/?$)[^/]+/?$"
         ),
         team_slug="aston-martin",
     ),
@@ -172,18 +176,10 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.reddit.com/r/formula1/.rss",
         rights_policy="metadata_summary_only",
     ),
-    EditorialSource(
-        key="reddit_f1technical",
-        provider="reddit:r/F1Technical",
-        source_class="community_signal",
-        mode="rss",
-        discovery_url="https://www.reddit.com/r/F1Technical/.rss",
-        rights_policy="metadata_summary_only",
-    ),
 )
 
 # These remain visible in the registry for provenance/planning, but are not fetched
-# by default because live smoke testing receives explicit anti-bot/access denials.
+# by default because live smoke testing receives explicit access/rate-limit denials.
 DISABLED_SOURCES: tuple[EditorialSource, ...] = (
     EditorialSource(
         key="team_ferrari",
@@ -205,11 +201,20 @@ DISABLED_SOURCES: tuple[EditorialSource, ...] = (
         article_path_pattern=r"^/news/.+",
         team_slug="cadillac",
     ),
+    EditorialSource(
+        key="reddit_f1technical",
+        provider="reddit:r/F1Technical",
+        source_class="community_signal",
+        mode="rss",
+        discovery_url="https://www.reddit.com/r/F1Technical/.rss",
+        rights_policy="metadata_summary_only",
+    ),
 )
 
 DISABLED_SOURCE_REASONS = {
     "team_ferrari": "live server-side fetch is blocked by Ferrari anti-bot challenge (403)",
     "team_cadillac": "live server-side fetch is blocked by Cadillac F1 access controls (403)",
+    "reddit_f1technical": "persistent Reddit 429 responses after retry/backoff in server-side live smoke",
 }
 
 ALL_SOURCES = SOURCES + DISABLED_SOURCES

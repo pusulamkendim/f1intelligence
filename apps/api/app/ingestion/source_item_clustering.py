@@ -85,6 +85,7 @@ def cluster_features(
         classification.entity_id
         for classification in classifications
         if classification.entity_type == "race"
+        and classification.relation_type == "context"
     )
     return ClusterFeatures(
         provider=provider,
@@ -135,10 +136,6 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
     if time_close is False:
         return None
 
-    # Live audit: distinct publishers often paraphrase the same event heavily. Two
-    # shared subjects/direct participants are therefore a strong identity signal.
-    # Requiring 0.20 lexical overlap kept the Elliott/Alpine and Hamilton/Ferrari
-    # clusters while rejecting a related-but-distinct Tsunoda/Red Bull pair (~0.15).
     if len(shared_strong) >= 2:
         threshold = 0.20 if time_close is True else 0.40
         if similarity >= threshold:
@@ -152,9 +149,6 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
                 reasons=reasons,
             )
 
-    # A single shared subject is common in F1 coverage, so demand much stronger
-    # headline agreement. This also lets first-party articles with missing timestamps
-    # join a cluster when the headline is clearly the same event.
     if shared_strong and similarity >= 0.40:
         score = 86 + min(6, max(0, round((similarity - 0.40) * 15)))
         return SameStoryScore(
@@ -163,8 +157,6 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
             reasons=reasons,
         )
 
-    # One strong subject plus the same canonical race/event context can tolerate
-    # lower lexical overlap, but only when both publication timestamps are close.
     if shared_strong and shared_races and time_close is True and similarity >= 0.12:
         score = 84
         score += min(4, max(0, round((similarity - 0.12) * 20)))
@@ -174,7 +166,6 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
             reasons=reasons,
         )
 
-    # Race context without a shared semantic subject remains deliberately strict.
     if similarity >= 0.90 and shared_races:
         return SameStoryScore(score=90, method="title_race_v2", reasons=reasons)
 
@@ -216,7 +207,8 @@ async def refresh_cluster_candidates(
                 ) AS strong_entity_ids,
                 ARRAY_REMOVE(
                     ARRAY_AGG(DISTINCT CASE
-                        WHEN e.entity_type = 'race' THEN sie.entity_id
+                        WHEN e.entity_type = 'race' AND sie.relation_type = 'context'
+                        THEN sie.entity_id
                     END),
                     NULL
                 ) AS race_entity_ids

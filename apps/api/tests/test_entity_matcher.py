@@ -8,6 +8,7 @@ def alias(
     value: str,
     *,
     entity_type: str = "person",
+    alias_type: str = "test",
     confidence: int = 90,
     valid_from_season: int | None = 2026,
     valid_to_season: int | None = 2026,
@@ -18,7 +19,7 @@ def alias(
         slug=name.casefold().replace(" ", "-"),
         display_name=name,
         alias=value,
-        alias_type="test",
+        alias_type=alias_type,
         confidence=confidence,
         valid_from_season=valid_from_season,
         valid_to_season=valid_to_season,
@@ -32,7 +33,12 @@ def test_normalize_entity_text_removes_diacritics_and_punctuation() -> None:
 def test_matcher_finds_multiple_entities_with_token_boundaries() -> None:
     red_bull = alias("Red Bull Racing", "Red Bull", entity_type="team", confidence=95)
     mclaren = alias("McLaren", "McLaren", entity_type="team", confidence=100)
-    hamilton_code = alias("Lewis Hamilton", "HAM", confidence=86)
+    hamilton_code = alias(
+        "Lewis Hamilton",
+        "HAM",
+        alias_type="driver_code",
+        confidence=86,
+    )
 
     matches = match_entities(
         "ICA hearing – McLaren and Red Bull; Hamilton was not named.",
@@ -44,12 +50,37 @@ def test_matcher_finds_multiple_entities_with_token_boundaries() -> None:
 
 
 def test_matcher_does_not_match_driver_code_inside_a_name() -> None:
-    hamilton_code = alias("Lewis Hamilton", "HAM", confidence=86)
+    hamilton_code = alias(
+        "Lewis Hamilton",
+        "HAM",
+        alias_type="driver_code",
+        confidence=86,
+    )
 
     assert match_entities("Lewis Hamilton statement", [hamilton_code], season=2026) == ()
     assert match_entities("HAM penalty decision", [hamilton_code], season=2026)[0].slug == (
         "lewis-hamilton"
     )
+
+
+def test_driver_code_requires_exact_case_and_does_not_match_common_word() -> None:
+    fornaroli_code = alias(
+        "Leonardo Fornaroli",
+        "FOR",
+        alias_type="driver_code",
+        confidence=86,
+    )
+
+    assert match_entities(
+        "Formula One reveals calendar for 2027",
+        [fornaroli_code],
+        season=2026,
+    ) == ()
+    assert match_entities(
+        "FOR receives a grid penalty",
+        [fornaroli_code],
+        season=2026,
+    )[0].slug == "leonardo-fornaroli"
 
 
 def test_matcher_respects_season_validity() -> None:

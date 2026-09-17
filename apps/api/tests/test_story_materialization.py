@@ -1,7 +1,10 @@
-from uuid import uuid4
+import asyncio
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID, uuid4
 
 from app.ingestion.source_item_entities import SourceItemEntityClassification
-from app.ingestion.story_materialization import classify_story_worthiness
+from app.ingestion.story_materialization import _create_story, classify_story_worthiness
 
 
 def _classification(relation_type: str = "subject") -> SourceItemEntityClassification:
@@ -76,3 +79,50 @@ def test_business_news_is_retained_and_taxonomized() -> None:
 
     assert decision.story_worthy is True
     assert decision.taxonomy == "team_business"
+
+
+class _StoryInsertResult:
+    def __init__(self, story_id: UUID):
+        self.story_id = story_id
+
+    def scalar_one(self) -> UUID:
+        return self.story_id
+
+
+class _CompileCheckingSession:
+    def __init__(self, story_id: UUID):
+        self.story_id = story_id
+
+    async def execute(self, statement: Any, params: dict[str, Any]) -> _StoryInsertResult:
+        compiled_params = statement.compile().params
+        assert "1" not in compiled_params
+        assert set(compiled_params) == {
+            "slug",
+            "title",
+            "summary",
+            "taxonomy",
+            "method",
+            "source_item_id",
+            "published_at",
+        }
+        assert set(params) == set(compiled_params)
+        return _StoryInsertResult(self.story_id)
+
+
+def test_create_story_sql_does_not_parse_json_as_bind_parameter() -> None:
+    story_id = uuid4()
+    source_item_id = uuid4()
+    session = _CompileCheckingSession(story_id)
+
+    result = asyncio.run(
+        _create_story(
+            session,  # type: ignore[arg-type]
+            source_item_id=source_item_id,
+            title="Example F1 story",
+            summary="Example summary",
+            taxonomy="general",
+            published_at=datetime(2026, 9, 17, 12, 0, tzinfo=UTC),
+        )
+    )
+
+    assert result == story_id

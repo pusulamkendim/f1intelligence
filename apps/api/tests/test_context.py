@@ -46,11 +46,12 @@ def override_with(fake_session: FakeSession):
     return override_db
 
 
-def test_driver_context_exposes_roster_and_session_specific_team_relations() -> None:
+def test_driver_context_exposes_roster_session_relations_timeline_and_related() -> None:
     entity_id = uuid4()
     person_id = uuid4()
     red_bull_id = uuid4()
     racing_bulls_id = uuid4()
+    story_id = uuid4()
     fetched_at = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
     fake_session = FakeSession(
         [
@@ -101,7 +102,7 @@ def test_driver_context_exposes_roster_and_session_specific_team_relations() -> 
                     "starting_grid": 0,
                     "overtakes": 0,
                     "standings": 1,
-                    "stories": 0,
+                    "stories": 1,
                     "documents": 0,
                     "evidence": 0,
                 }
@@ -114,6 +115,26 @@ def test_driver_context_exposes_roster_and_session_specific_team_relations() -> 
                     "metadata": {
                         "provider_entity_type": "driver",
                         "provider_id": "tsunoda",
+                    },
+                }
+            ],
+            [
+                {
+                    "event_id": str(story_id),
+                    "event_type": "story",
+                    "occurred_at": fetched_at,
+                    "label": "Tsunoda returns to Racing Bulls",
+                    "target_type": "story",
+                    "target_id": str(story_id),
+                    "target_key": "tsunoda-racing-bulls-return",
+                    "target_label": "Tsunoda returns to Racing Bulls",
+                    "target_subtype": "developing",
+                    "provider": None,
+                    "source_url": None,
+                    "fetched_at": fetched_at,
+                    "metadata": {
+                        "relation_type": "directly_involved",
+                        "relation_confidence": 100,
                     },
                 }
             ],
@@ -141,8 +162,17 @@ def test_driver_context_exposes_roster_and_session_specific_team_relations() -> 
         "qualifying_results",
         "session_results",
         "standings",
+        "stories",
     }
     assert payload["provenance"][0]["metadata"]["provider_id"] == "tsunoda"
+    assert payload["timeline"][0]["type"] == "story"
+    assert payload["timeline"][0]["source"] == "stories"
+    assert payload["timeline"][0]["target"]["key"] == "tsunoda-racing-bulls-return"
+    assert [item["key"] for item in payload["related"]] == [
+        "red-bull-racing",
+        "racing-bulls",
+        "tsunoda-racing-bulls-return",
+    ]
 
 
 def test_session_context_links_race_season_and_participants() -> None:
@@ -219,6 +249,7 @@ def test_session_context_links_race_season_and_participants() -> None:
                     },
                 }
             ],
+            [],
         ]
     )
     app.dependency_overrides[get_db] = override_with(fake_session)
@@ -245,6 +276,11 @@ def test_session_context_links_race_season_and_participants() -> None:
         "stints",
         "positions",
     }
+    assert [item["key"] for item in payload["related"]] == [
+        "2026-madrid-grand-prix",
+        "2026",
+        "yuki-tsunoda",
+    ]
 
 
 def test_season_context_is_virtual_and_lists_canonical_races() -> None:
@@ -278,6 +314,7 @@ def test_season_context_is_virtual_and_lists_canonical_races() -> None:
                     "stories": 2,
                 }
             ],
+            [],
         ]
     )
     app.dependency_overrides[get_db] = override_with(fake_session)
@@ -292,6 +329,7 @@ def test_season_context_is_virtual_and_lists_canonical_races() -> None:
     assert payload["target"]["metadata"]["race_count"] == 23
     assert payload["relations"][0]["type"] == "has_race"
     assert payload["provenance"] == []
+    assert payload["related"][0]["key"] == "2026-australian-grand-prix"
 
 
 def test_context_returns_404_for_missing_target() -> None:

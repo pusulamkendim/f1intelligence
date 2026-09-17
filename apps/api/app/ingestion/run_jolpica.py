@@ -15,11 +15,11 @@ from app.ingestion.jolpica import (
     JolpicaRace,
     JolpicaRaceResult,
 )
+from app.ingestion.jolpica_calendar_store import upsert_calendar
 from app.ingestion.jolpica_store import (
     record_sync_run,
     store_constructor_standings,
     store_driver_standings,
-    upsert_calendar,
     upsert_qualifying_results,
     upsert_race_results,
 )

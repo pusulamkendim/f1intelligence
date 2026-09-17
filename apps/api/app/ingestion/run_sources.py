@@ -22,6 +22,7 @@ from app.ingestion.source_item_entities import SourceItemText, classify_source_i
 from app.ingestion.source_item_store import (
     SourceItemRecord,
     load_entity_aliases,
+    load_team_context_aliases,
     reconcile_source_item_entities,
     upsert_source_item,
 )
@@ -202,11 +203,23 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
         async with SessionLocal() as session:
             async with session.begin():
                 aliases = await load_entity_aliases(session)
+                team_alias_cache: dict[int | None, list] = {}
                 for item in items:
                     record = item_to_source_record(source, item)
                     season = item.published_at.year if item.published_at else None
                     semantic_title = str(record.raw_metadata["classification_title"])
                     source_item_id = await upsert_source_item(session, record)
+
+                    item_aliases = aliases
+                    if source.team_slug:
+                        if season not in team_alias_cache:
+                            team_alias_cache[season] = await load_team_context_aliases(
+                                session,
+                                team_slug=source.team_slug,
+                                season=season,
+                            )
+                        item_aliases = aliases + team_alias_cache[season]
+
                     classifications = classify_source_item_entities(
                         SourceItemText(
                             title=semantic_title,
@@ -216,7 +229,7 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
                             season=season,
                             source_context_team_slug=source.team_slug,
                         ),
-                        aliases,
+                        item_aliases,
                     )
                     await reconcile_source_item_entities(
                         session,

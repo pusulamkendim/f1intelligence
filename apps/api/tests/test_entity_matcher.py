@@ -95,6 +95,32 @@ def test_matcher_respects_season_validity() -> None:
     assert len(match_entities("Example driver", [historical], season=2025)) == 1
 
 
+def test_race_season_can_differ_from_team_person_identity_season() -> None:
+    mclaren = alias(
+        "McLaren",
+        "McLaren",
+        entity_type="team",
+        valid_from_season=2026,
+        valid_to_season=None,
+    )
+    monaco_2026 = alias(
+        "2026 Monaco Grand Prix",
+        "Monaco",
+        entity_type="race",
+        valid_from_season=2026,
+        valid_to_season=2026,
+    )
+
+    matches = match_entities(
+        "McLaren reacts to Monaco Sprint news for 2027",
+        [mclaren, monaco_2026],
+        season=2026,
+        race_season=2027,
+    )
+
+    assert {match.slug for match in matches} == {"mclaren"}
+
+
 def test_matcher_prefers_more_specific_alias_for_same_entity() -> None:
     entity_id = uuid4()
     aliases = [

@@ -63,7 +63,14 @@ def match_entities(
     aliases: list[EntityAlias],
     *,
     season: int | None = None,
+    race_season: int | None = None,
 ) -> tuple[EntityMention, ...]:
+    """Resolve aliases while allowing race editions to use a distinct season.
+
+    Editorial stories frequently discuss a future calendar while being published in
+    the current season. Team/person identity validity should still follow publication
+    context, but race aliases must follow the season explicitly referenced by the story.
+    """
     normalized_text = normalize_entity_text(text)
     if not normalized_text:
         return ()
@@ -72,7 +79,8 @@ def match_entities(
     matches: dict[UUID, tuple[int, int, EntityMention]] = {}
 
     for alias in aliases:
-        if not _is_active_for_season(alias, season):
+        alias_season = race_season if alias.entity_type == "race" else season
+        if not _is_active_for_season(alias, alias_season):
             continue
 
         normalized_alias = normalize_entity_text(alias.alias)

@@ -48,6 +48,18 @@ class RaceSummary(BaseModel):
     story_count: int
 
 
+class RaceSessionSummary(BaseModel):
+    id: UUID
+    session_code: str
+    session_name: str
+    session_type: str | None = None
+    sequence: int | None = None
+    starts_at: datetime
+    ends_at: datetime | None = None
+    is_cancelled: bool
+    result_count: int = 0
+
+
 class RaceDocumentSummary(BaseModel):
     id: UUID
     document_number: int | None = None
@@ -58,7 +70,15 @@ class RaceDocumentSummary(BaseModel):
     recalled: bool
 
 
+class NextRaceContext(BaseModel):
+    race: RaceSummary
+    next_session: RaceSessionSummary | None = None
+    seconds_until_race: int
+    seconds_until_next_session: int | None = None
+
+
 class RaceDetail(RaceSummary):
     synthesis: str | None = None
     stories: list[StorySummary]
     documents: list[RaceDocumentSummary]
+    sessions: list[RaceSessionSummary]

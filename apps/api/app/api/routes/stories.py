@@ -5,7 +5,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.story import EvidenceItem, StoryDetail, StoryEntity, StorySummary
+from app.schemas.story import (
+    EvidenceItem,
+    StoryDetail,
+    StoryEntity,
+    StorySourceItem,
+    StorySummary,
+)
 
 router = APIRouter(prefix="/api/v1/stories", tags=["stories"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -22,13 +28,18 @@ async def list_stories(db: DbSession) -> list[StorySummary]:
                 s.title,
                 s.summary,
                 s.status,
+                s.taxonomy,
+                s.source_count,
+                s.first_published_at,
+                s.last_published_at,
                 s.updated_at,
                 COUNT(e.id)::int AS evidence_count,
                 MAX(COALESCE(e.published_at, e.captured_at)) AS latest_evidence_at
             FROM stories s
             LEFT JOIN evidence e ON e.story_id = s.id
+            WHERE s.merged_into_story_id IS NULL
             GROUP BY s.id
-            ORDER BY s.updated_at DESC, s.title ASC
+            ORDER BY COALESCE(s.last_published_at, s.updated_at) DESC, s.title ASC
             """
         )
     )
@@ -41,21 +52,36 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
     story_result = await db.execute(
         text(
             """
+            WITH RECURSIVE story_chain AS (
+                SELECT id, merged_into_story_id
+                FROM stories
+                WHERE slug = :slug
+                UNION ALL
+                SELECT s.id, s.merged_into_story_id
+                FROM stories s
+                JOIN story_chain sc ON s.id = sc.merged_into_story_id
+            )
             SELECT
-                id,
-                slug,
-                title,
-                summary,
-                status,
-                significance,
-                confidence,
-                what_changed,
-                why_it_matters,
-                what_to_watch_next,
-                created_at,
-                updated_at
-            FROM stories
-            WHERE slug = :slug
+                s.id,
+                s.slug,
+                s.title,
+                s.summary,
+                s.status,
+                s.taxonomy,
+                s.source_count,
+                s.first_published_at,
+                s.last_published_at,
+                s.significance,
+                s.confidence,
+                s.what_changed,
+                s.why_it_matters,
+                s.what_to_watch_next,
+                s.created_at,
+                s.updated_at
+            FROM story_chain sc
+            JOIN stories s ON s.id = sc.id
+            WHERE sc.merged_into_story_id IS NULL
+            LIMIT 1
             """
         ),
         {"slug": slug},
@@ -96,6 +122,34 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
         {"story_id": story["id"]},
     )
     entity_items = [StoryEntity(**dict(row)) for row in entity_result.mappings().all()]
+
+    source_result = await db.execute(
+        text(
+            """
+            SELECT
+                si.id AS source_item_id,
+                si.provider,
+                si.source_type,
+                si.source_class,
+                si.title,
+                si.source_url,
+                si.author,
+                si.published_at,
+                ssi.relation_type,
+                ssi.cluster_method,
+                ssi.cluster_confidence
+            FROM story_source_items ssi
+            JOIN source_items si ON si.id = ssi.source_item_id
+            WHERE ssi.story_id = :story_id
+            ORDER BY
+                CASE WHEN ssi.relation_type = 'primary' THEN 0 ELSE 1 END,
+                COALESCE(si.published_at, si.fetched_at),
+                si.provider
+            """
+        ),
+        {"story_id": story["id"]},
+    )
+    source_items = [StorySourceItem(**dict(row)) for row in source_result.mappings().all()]
 
     evidence_result = await db.execute(
         text(
@@ -145,5 +199,6 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
     return StoryDetail(
         **dict(story),
         entities=entity_items,
+        sources=source_items,
         evidence=evidence_items,
     )

@@ -33,6 +33,7 @@ from app.ingestion.source_registry import (
     SOURCES,
 )
 from app.ingestion.source_semantics import classification_title
+from app.ingestion.story_materialization import materialize_source_item
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 COMMUNITY_SOURCE_GAP_SECONDS = 5.0
@@ -47,6 +48,11 @@ class SourceStats:
     persisted: int = 0
     entity_links: int = 0
     cluster_candidates: int = 0
+    stories_created: int = 0
+    stories_attached: int = 0
+    stories_existing: int = 0
+    stories_merged: int = 0
+    stories_skipped: int = 0
     failures: int = 0
     error: str | None = None
 
@@ -66,6 +72,26 @@ class IngestionStats:
     @property
     def cluster_candidates(self) -> int:
         return sum(item.cluster_candidates for item in self.sources)
+
+    @property
+    def stories_created(self) -> int:
+        return sum(item.stories_created for item in self.sources)
+
+    @property
+    def stories_attached(self) -> int:
+        return sum(item.stories_attached for item in self.sources)
+
+    @property
+    def stories_existing(self) -> int:
+        return sum(item.stories_existing for item in self.sources)
+
+    @property
+    def stories_merged(self) -> int:
+        return sum(item.stories_merged for item in self.sources)
+
+    @property
+    def stories_skipped(self) -> int:
+        return sum(item.stories_skipped for item in self.sources)
 
     @property
     def failures(self) -> int:
@@ -152,9 +178,6 @@ async def _fetch_source_items(
     urls = discover_listing_urls(response.text, source)
     items: list[EditorialItem] = []
     failures = 0
-    # Parse beyond the requested item count because some listing pages still expose
-    # stale/category URLs that fail metadata extraction. Stop as soon as enough
-    # valid articles have been collected.
     candidate_limit = min(len(urls), max(limit * 4, limit))
     for url in urls[:candidate_limit]:
         if len(items) >= limit:
@@ -174,6 +197,19 @@ async def _fetch_source_items(
         if settings.editorial_source_min_interval_seconds:
             await asyncio.sleep(settings.editorial_source_min_interval_seconds)
     return items, len(urls), failures
+
+
+def _record_story_action(stats: SourceStats, action: str) -> None:
+    if action == "created":
+        stats.stories_created += 1
+    elif action == "attached":
+        stats.stories_attached += 1
+    elif action == "existing":
+        stats.stories_existing += 1
+    elif action == "merged":
+        stats.stories_merged += 1
+    elif action == "skipped":
+        stats.stories_skipped += 1
 
 
 async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
@@ -248,6 +284,16 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
                             classifications=classifications,
                         ),
                     )
+                    materialized = await materialize_source_item(
+                        session,
+                        source_item_id=source_item_id,
+                        source_class=record.source_class,
+                        title=semantic_title,
+                        summary=record.standfirst or record.summary,
+                        published_at=record.published_at,
+                        classifications=classifications,
+                    )
+                    _record_story_action(stats, materialized.action)
     except Exception as exc:  # source isolation: one provider must not abort the whole run
         stats.failures += 1
         stats.error = f"{type(exc).__name__}: {exc}"
@@ -313,6 +359,11 @@ async def async_main() -> None:
                 "persisted": stats.persisted,
                 "entity_links": stats.entity_links,
                 "cluster_candidates": stats.cluster_candidates,
+                "stories_created": stats.stories_created,
+                "stories_attached": stats.stories_attached,
+                "stories_existing": stats.stories_existing,
+                "stories_merged": stats.stories_merged,
+                "stories_skipped": stats.stories_skipped,
                 "failures": stats.failures,
                 "sources": [asdict(item) for item in stats.sources],
             },

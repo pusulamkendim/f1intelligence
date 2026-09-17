@@ -127,7 +127,7 @@ SOURCES: tuple[EditorialSource, ...] = (
         discovery_url="https://www.haasf1team.com/news",
         allowed_hosts=("www.haasf1team.com", "haasf1team.com"),
         article_path_pattern=r"^/news/[^/]+/?$",
-        team_slug="haas-f1-team",
+        team_slug="haas",
     ),
     EditorialSource(
         key="team_audi",

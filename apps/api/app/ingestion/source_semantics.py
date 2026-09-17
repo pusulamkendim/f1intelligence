@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 
-# Keep the source-of-record title untouched. These patterns only produce the title
-# used for entity/relation classification, so publisher chrome does not become a
-# semantic subject merely because it is embedded in the document title.
+from app.ingestion.content_cleanup import clean_title
+
+# Keep source-specific chrome removal narrow. Transport artefacts such as HTML
+# entities are decoded before classification, while publisher wording remains
+# otherwise untouched unless explicitly configured here.
 _TITLE_STRIP_PATTERNS: dict[str, tuple[str, ...]] = {
     "team_haas": (
         r"^Haas F1 Team\s*\|\s*",
@@ -17,7 +19,7 @@ _TITLE_STRIP_PATTERNS: dict[str, tuple[str, ...]] = {
 
 
 def classification_title(source_key: str, title: str) -> str:
-    original = " ".join(title.split())
+    original = clean_title(title)
     cleaned = original
     for pattern in _TITLE_STRIP_PATTERNS.get(source_key, ()):
         cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)

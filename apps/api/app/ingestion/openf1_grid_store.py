@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import text
 
@@ -25,14 +26,33 @@ async def starting_grid_loaded_session_keys(session, season: int) -> set[int]:
     return {int(row[0]) for row in result}
 
 
+async def starting_grid_entity_maps(
+    session, session_id: Any
+) -> tuple[dict[int, Any | None], dict[int, Any | None]]:
+    result = await session.execute(
+        text(
+            """
+            SELECT driver_number, driver_entity_id, team_entity_id
+            FROM session_entries
+            WHERE session_id = :session_id AND provider = 'openf1'
+            """
+        ),
+        {"session_id": session_id},
+    )
+    rows = result.mappings().all()
+    drivers = {int(row["driver_number"]): row["driver_entity_id"] for row in rows}
+    teams = {int(row["driver_number"]): row["team_entity_id"] for row in rows}
+    return drivers, teams
+
+
 async def upsert_starting_grid(
     session,
     *,
-    session_id,
+    session_id: Any,
     session_key: int,
     rows: list[OpenF1StartingGridRow],
-    drivers: dict[int, str | None],
-    teams: dict[int, str | None],
+    drivers: dict[int, Any | None],
+    teams: dict[int, Any | None],
 ) -> int:
     source_url = f"{OPENF1_BASE_URL}/starting_grid?session_key={session_key}"
     fetched_at = datetime.now(UTC)

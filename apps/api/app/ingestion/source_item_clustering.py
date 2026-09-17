@@ -98,8 +98,9 @@ def cluster_features(
 def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStoryScore | None:
     """Score conservative cross-source same-story candidates.
 
-    This deliberately does not auto-merge. A high score only records a candidate
-    pair that a later story-clustering step may accept or reject.
+    The thresholds are calibrated for candidate generation, not automatic merging.
+    Multiple shared semantic entities can compensate for publisher headline wording,
+    while one shared entity needs much stronger lexical or event-context support.
     """
     if left.provider == right.provider:
         return None
@@ -114,40 +115,68 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
     similarity = _jaccard(_tokens(left.title), _tokens(right.title))
 
     time_close: bool | None = None
+    time_delta_hours: float | None = None
     if left.published_at is not None and right.published_at is not None:
-        delta = abs((left.published_at - right.published_at).total_seconds())
-        time_close = delta <= 72 * 60 * 60
+        delta_seconds = abs((left.published_at - right.published_at).total_seconds())
+        time_delta_hours = delta_seconds / (60 * 60)
+        time_close = delta_seconds <= 72 * 60 * 60
 
     reasons: dict[str, object] = {
         "title_similarity": round(similarity, 3),
         "shared_strong_entities": len(shared_strong),
         "shared_race_entities": len(shared_races),
         "time_within_72h": time_close,
+        "time_delta_hours": round(time_delta_hours, 2) if time_delta_hours is not None else None,
     }
 
     if left_normalized == right_normalized and len(left_normalized) >= 12:
-        return SameStoryScore(score=100, method="exact_title_v1", reasons=reasons)
+        return SameStoryScore(score=100, method="exact_title_v2", reasons=reasons)
 
     if time_close is False:
         return None
 
-    # With a real publication-time match and a shared subject/directly-involved entity,
-    # a lower lexical threshold is safe enough for a *reviewable candidate*. When one
-    # side lacks a timestamp, retain the much stricter title threshold.
-    near_threshold = 0.68 if time_close is True else 0.90
-    if similarity >= near_threshold and shared_strong:
-        score = 90
-        score += min(4, len(shared_strong) * 2)
-        score += 2 if shared_races else 0
-        score += min(3, max(0, round((similarity - near_threshold) * 10)))
+    # Live audit: distinct publishers often paraphrase the same event heavily. Two
+    # shared subjects/direct participants are therefore a strong identity signal.
+    # Requiring 0.20 lexical overlap kept the Elliott/Alpine and Hamilton/Ferrari
+    # clusters while rejecting a related-but-distinct Tsunoda/Red Bull pair (~0.15).
+    if len(shared_strong) >= 2:
+        threshold = 0.20 if time_close is True else 0.40
+        if similarity >= threshold:
+            score = 88
+            score += min(4, len(shared_strong) * 2)
+            score += 2 if shared_races else 0
+            score += min(4, max(0, round((similarity - threshold) * 10)))
+            return SameStoryScore(
+                score=min(98, score),
+                method="multi_entity_title_v2",
+                reasons=reasons,
+            )
+
+    # A single shared subject is common in F1 coverage, so demand much stronger
+    # headline agreement. This also lets first-party articles with missing timestamps
+    # join a cluster when the headline is clearly the same event.
+    if shared_strong and similarity >= 0.40:
+        score = 86 + min(6, max(0, round((similarity - 0.40) * 15)))
         return SameStoryScore(
-            score=min(98, score),
-            method="title_entity_v1",
+            score=min(94, score),
+            method="single_entity_title_v2",
             reasons=reasons,
         )
 
+    # One strong subject plus the same canonical race/event context can tolerate
+    # lower lexical overlap, but only when both publication timestamps are close.
+    if shared_strong and shared_races and time_close is True and similarity >= 0.12:
+        score = 84
+        score += min(4, max(0, round((similarity - 0.12) * 20)))
+        return SameStoryScore(
+            score=min(90, score),
+            method="entity_race_title_v2",
+            reasons=reasons,
+        )
+
+    # Race context without a shared semantic subject remains deliberately strict.
     if similarity >= 0.90 and shared_races:
-        return SameStoryScore(score=90, method="title_race_v1", reasons=reasons)
+        return SameStoryScore(score=90, method="title_race_v2", reasons=reasons)
 
     return None
 

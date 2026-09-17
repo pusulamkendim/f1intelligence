@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any
 
@@ -91,7 +91,7 @@ def _utc_datetime(date_value: str, time_value: str | None) -> datetime | None:
     if not time_value:
         return None
     parsed_time = time.fromisoformat(time_value.removesuffix("Z"))
-    return datetime.combine(date.fromisoformat(date_value), parsed_time, tzinfo=timezone.utc)
+    return datetime.combine(date.fromisoformat(date_value), parsed_time, tzinfo=UTC)
 
 
 def parse_calendar(payload: dict[str, Any]) -> list[JolpicaRace]:

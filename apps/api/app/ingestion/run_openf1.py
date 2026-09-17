@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.ingestion.openf1 import OPENF1_BASE_URL, OpenF1Client, OpenF1Session
+from app.ingestion.openf1_canonicalize import reconcile_unresolved_session_drivers
 from app.ingestion.openf1_store import (
     load_season_races,
     loaded_session_result_keys,
@@ -66,6 +67,7 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
     settings = get_settings()
     headers = {"User-Agent": settings.source_user_agent, "Accept": "application/json"}
     timeout = httpx.Timeout(connect=settings.source_http_connect_timeout_seconds, read=settings.source_http_read_timeout_seconds, write=settings.source_http_read_timeout_seconds, pool=settings.source_http_connect_timeout_seconds)
+    canonicalized_driver_names = 0
     async with httpx.AsyncClient(timeout=timeout, headers=headers) as http_client:
         client = OpenF1Client(http_client, min_interval_seconds=settings.openf1_min_interval_seconds, retries=settings.source_http_retries, retry_backoff_seconds=settings.source_http_retry_backoff_seconds)
         meetings = await client.meetings(season)
@@ -76,10 +78,11 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                 matches = match_meetings_to_races(meetings, races)
                 meeting_links = await upsert_meeting_links(db, meetings, matches)
                 session_ids = await upsert_sessions(db, provider_sessions, matches)
+                canonicalized_driver_names += await reconcile_unresolved_session_drivers(db, season)
                 cached_keys = await loaded_session_result_keys(db, season)
                 telemetry_cached = await telemetry_loaded_session_keys(db, season)
                 await _audit(db, dataset="meetings", season=season, records_seen=len(meetings), records_written=meeting_links, metadata={"matched_races": len(matches)})
-                await _audit(db, dataset="sessions", season=season, records_seen=len(provider_sessions), records_written=len(session_ids), metadata={"matched_sessions": len(session_ids)})
+                await _audit(db, dataset="sessions", season=season, records_seen=len(provider_sessions), records_written=len(session_ids), metadata={"matched_sessions": len(session_ids), "canonicalized_driver_names": canonicalized_driver_names})
 
         matched_sessions = [item for item in provider_sessions if item.session_key in session_ids]
         candidates, reused_keys = _result_candidates(matched_sessions, cached_keys)
@@ -91,6 +94,9 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
             async with SessionLocal() as db:
                 async with db.begin():
                     mappings, unresolved = await replace_session_entries(db, season=season, session_id=session_ids[item.session_key], drivers=drivers)
+                    if unresolved:
+                        canonicalized_driver_names += await reconcile_unresolved_session_drivers(db, season)
+                        mappings, unresolved = await replace_session_entries(db, season=season, session_id=session_ids[item.session_key], drivers=drivers)
                     written = await replace_session_results(db, session_id=session_ids[item.session_key], session_key=item.session_key, rows=results, entity_mappings=mappings)
                     await _audit(db, dataset="session_result", season=season, records_seen=len(results), records_written=written, metadata={"session_key": item.session_key, "session_code": item.session_code, "drivers": len(drivers), "unresolved_entries": unresolved})
             fetched_session_keys.append(item.session_key)
@@ -113,7 +119,7 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                     await _audit(db, dataset="telemetry", season=season, records_seen=len(laps) + len(stints) + len(positions), records_written=lap_count + stint_count + position_count, metadata={"session_key": item.session_key, "session_code": item.session_code, "laps": lap_count, "stints": stint_count, "positions": position_count})
             telemetry_summary.append({"session_key": item.session_key, "laps": len(laps), "stints": len(stints), "positions": len(positions)})
 
-    return {"season": season, "meetings_seen": len(meetings), "meetings_matched": len(matches), "sessions_seen": len(provider_sessions), "sessions_matched": len(session_ids), "fetched_result_session_keys": fetched_session_keys, "cached_result_session_keys": sorted(reused_keys), "session_entries_written": entries_written, "session_results_written": results_written, "unresolved_session_entries": unresolved_entries, "telemetry_sessions": telemetry_summary}
+    return {"season": season, "meetings_seen": len(meetings), "meetings_matched": len(matches), "sessions_seen": len(provider_sessions), "sessions_matched": len(session_ids), "fetched_result_session_keys": fetched_session_keys, "cached_result_session_keys": sorted(reused_keys), "session_entries_written": entries_written, "session_results_written": results_written, "unresolved_session_entries": unresolved_entries, "canonicalized_driver_names": canonicalized_driver_names, "telemetry_sessions": telemetry_summary}
 
 
 def main() -> None:

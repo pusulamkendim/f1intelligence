@@ -22,6 +22,60 @@ def _race_provider_id(race: JolpicaRace) -> str:
     return f"{race.season}:{race.round}"
 
 
+def _validated_entity_map(
+    provider_ids: set[str],
+    resolved_rows: list[tuple[str, Any]],
+    *,
+    entity_type: str,
+    season: int,
+) -> dict[str, Any]:
+    resolved = dict(resolved_rows)
+    missing = sorted(provider_ids - set(resolved))
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(
+            f"missing canonical {PROVIDER} {entity_type} mappings for season {season}: {joined}"
+        )
+    return resolved
+
+
+async def _resolve_entity_ids(
+    session: AsyncSession,
+    *,
+    entity_type: str,
+    provider_ids: set[str],
+    season: int,
+) -> dict[str, Any]:
+    if not provider_ids:
+        return {}
+
+    result = await session.execute(
+        text(
+            """
+            SELECT provider_id, entity_id
+            FROM entity_provider_ids
+            WHERE provider = :provider
+              AND provider_entity_type = :entity_type
+              AND provider_id = ANY(CAST(:provider_ids AS text[]))
+              AND (valid_from_season IS NULL OR valid_from_season <= :season)
+              AND (valid_to_season IS NULL OR valid_to_season >= :season)
+            """
+        ),
+        {
+            "provider": PROVIDER,
+            "entity_type": entity_type,
+            "provider_ids": sorted(provider_ids),
+            "season": season,
+        },
+    )
+    return _validated_entity_map(
+        provider_ids,
+        [(row.provider_id, row.entity_id) for row in result],
+        entity_type=entity_type,
+        season=season,
+    )
+
+
 async def upsert_calendar(session: AsyncSession, races: list[JolpicaRace]) -> int:
     fetched_at = datetime.now(UTC)
     written = 0
@@ -96,6 +150,18 @@ async def upsert_race_results(
     source_url: str,
 ) -> int:
     race_id = await _race_id(session, season, round_number)
+    driver_entities = await _resolve_entity_ids(
+        session,
+        entity_type="driver",
+        provider_ids={row.driver_id for row in rows},
+        season=season,
+    )
+    team_entities = await _resolve_entity_ids(
+        session,
+        entity_type="constructor",
+        provider_ids={row.constructor_id for row in rows if row.constructor_id is not None},
+        season=season,
+    )
     fetched_at = datetime.now(UTC)
     for row in rows:
         provider_result_id = f"{season}:{round_number}:{row.driver_id}"
@@ -104,18 +170,23 @@ async def upsert_race_results(
                 """
                 INSERT INTO race_results (
                     race_id, provider, provider_result_id, driver_provider_id,
-                    constructor_provider_id, car_number, grid_position, finish_position,
-                    position_text, points, laps, status, finish_time, fastest_lap_rank,
-                    fastest_lap_number, fastest_lap_time, source_url, fetched_at
+                    constructor_provider_id, driver_entity_id, team_entity_id,
+                    car_number, grid_position, finish_position, position_text, points,
+                    laps, status, finish_time, fastest_lap_rank, fastest_lap_number,
+                    fastest_lap_time, source_url, fetched_at
                 ) VALUES (
                     :race_id, :provider, :provider_result_id, :driver_id, :constructor_id,
-                    :car_number, :grid_position, :finish_position, :position_text, :points,
-                    :laps, :status, :finish_time, :fastest_lap_rank, :fastest_lap_number,
-                    :fastest_lap_time, :source_url, :fetched_at
+                    :driver_entity_id, :team_entity_id, :car_number, :grid_position,
+                    :finish_position, :position_text, :points, :laps, :status, :finish_time,
+                    :fastest_lap_rank, :fastest_lap_number, :fastest_lap_time,
+                    :source_url, :fetched_at
                 )
                 ON CONFLICT (provider, provider_result_id) DO UPDATE SET
                     race_id = EXCLUDED.race_id,
+                    driver_provider_id = EXCLUDED.driver_provider_id,
                     constructor_provider_id = EXCLUDED.constructor_provider_id,
+                    driver_entity_id = EXCLUDED.driver_entity_id,
+                    team_entity_id = EXCLUDED.team_entity_id,
                     car_number = EXCLUDED.car_number,
                     grid_position = EXCLUDED.grid_position,
                     finish_position = EXCLUDED.finish_position,
@@ -137,6 +208,10 @@ async def upsert_race_results(
                 "provider_result_id": provider_result_id,
                 "driver_id": row.driver_id,
                 "constructor_id": row.constructor_id,
+                "driver_entity_id": driver_entities[row.driver_id],
+                "team_entity_id": (
+                    team_entities[row.constructor_id] if row.constructor_id is not None else None
+                ),
                 "car_number": row.car_number,
                 "grid_position": row.grid_position,
                 "finish_position": row.position,
@@ -168,6 +243,18 @@ async def upsert_qualifying_results(
     source_url: str,
 ) -> int:
     race_id = await _race_id(session, season, round_number)
+    driver_entities = await _resolve_entity_ids(
+        session,
+        entity_type="driver",
+        provider_ids={row.driver_id for row in rows},
+        season=season,
+    )
+    team_entities = await _resolve_entity_ids(
+        session,
+        entity_type="constructor",
+        provider_ids={row.constructor_id for row in rows if row.constructor_id is not None},
+        season=season,
+    )
     fetched_at = datetime.now(UTC)
     for row in rows:
         provider_result_id = f"{season}:{round_number}:{row.driver_id}"
@@ -176,15 +263,19 @@ async def upsert_qualifying_results(
                 """
                 INSERT INTO qualifying_results (
                     race_id, provider, provider_result_id, driver_provider_id,
-                    constructor_provider_id, car_number, position, q1, q2, q3,
-                    source_url, fetched_at
+                    constructor_provider_id, driver_entity_id, team_entity_id,
+                    car_number, position, q1, q2, q3, source_url, fetched_at
                 ) VALUES (
                     :race_id, :provider, :provider_result_id, :driver_id, :constructor_id,
-                    :car_number, :position, :q1, :q2, :q3, :source_url, :fetched_at
+                    :driver_entity_id, :team_entity_id, :car_number, :position,
+                    :q1, :q2, :q3, :source_url, :fetched_at
                 )
                 ON CONFLICT (provider, provider_result_id) DO UPDATE SET
                     race_id = EXCLUDED.race_id,
+                    driver_provider_id = EXCLUDED.driver_provider_id,
                     constructor_provider_id = EXCLUDED.constructor_provider_id,
+                    driver_entity_id = EXCLUDED.driver_entity_id,
+                    team_entity_id = EXCLUDED.team_entity_id,
                     car_number = EXCLUDED.car_number,
                     position = EXCLUDED.position,
                     q1 = EXCLUDED.q1,
@@ -200,6 +291,10 @@ async def upsert_qualifying_results(
                 "provider_result_id": provider_result_id,
                 "driver_id": row.driver_id,
                 "constructor_id": row.constructor_id,
+                "driver_entity_id": driver_entities[row.driver_id],
+                "team_entity_id": (
+                    team_entities[row.constructor_id] if row.constructor_id is not None else None
+                ),
                 "car_number": row.car_number,
                 "position": row.position,
                 "q1": row.q1,
@@ -243,6 +338,13 @@ async def store_driver_standings(
         session, "driver_standings_snapshots", season, after_round, content_hash
     ):
         return False
+
+    driver_entities = await _resolve_entity_ids(
+        session,
+        entity_type="driver",
+        provider_ids={row.driver_id for row in rows},
+        season=season,
+    )
     snapshot_id = (
         await session.execute(
             text(
@@ -267,15 +369,16 @@ async def store_driver_standings(
             text(
                 """
                 INSERT INTO driver_standing_rows
-                    (snapshot_id, driver_provider_id, position, points, wins,
+                    (snapshot_id, driver_provider_id, driver_entity_id, position, points, wins,
                      constructor_provider_ids)
-                VALUES (:snapshot_id, :driver_id, :position, :points, :wins,
+                VALUES (:snapshot_id, :driver_id, :driver_entity_id, :position, :points, :wins,
                         :constructor_ids)
                 """
             ),
             {
                 "snapshot_id": snapshot_id,
                 "driver_id": row.driver_id,
+                "driver_entity_id": driver_entities[row.driver_id],
                 "position": row.position,
                 "points": row.points,
                 "wins": row.wins,
@@ -297,6 +400,13 @@ async def store_constructor_standings(
         session, "constructor_standings_snapshots", season, after_round, content_hash
     ):
         return False
+
+    team_entities = await _resolve_entity_ids(
+        session,
+        entity_type="constructor",
+        provider_ids={row.constructor_id for row in rows},
+        season=season,
+    )
     snapshot_id = (
         await session.execute(
             text(
@@ -321,13 +431,14 @@ async def store_constructor_standings(
             text(
                 """
                 INSERT INTO constructor_standing_rows
-                    (snapshot_id, constructor_provider_id, position, points, wins)
-                VALUES (:snapshot_id, :constructor_id, :position, :points, :wins)
+                    (snapshot_id, constructor_provider_id, team_entity_id, position, points, wins)
+                VALUES (:snapshot_id, :constructor_id, :team_entity_id, :position, :points, :wins)
                 """
             ),
             {
                 "snapshot_id": snapshot_id,
                 "constructor_id": row.constructor_id,
+                "team_entity_id": team_entities[row.constructor_id],
                 "position": row.position,
                 "points": row.points,
                 "wins": row.wins,

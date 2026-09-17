@@ -51,6 +51,10 @@ def test_list_stories_returns_public_story_summaries() -> None:
                     "title": "2026 FIA Formula One sporting and regulatory decisions",
                     "summary": "Official FIA decisions and regulatory developments.",
                     "status": "monitoring",
+                    "taxonomy": "regulation",
+                    "source_count": 2,
+                    "first_published_at": now,
+                    "last_published_at": now,
                     "updated_at": now,
                     "evidence_count": 2,
                     "latest_evidence_at": now,
@@ -73,14 +77,17 @@ def test_list_stories_returns_public_story_summaries() -> None:
     assert len(payload) == 1
     assert payload[0]["slug"] == "fia-2026-sporting-decisions"
     assert payload[0]["evidence_count"] == 2
+    assert payload[0]["source_count"] == 2
+    assert payload[0]["taxonomy"] == "regulation"
     assert "confidence" not in payload[0]
     assert "significance" not in payload[0]
 
 
-def test_get_story_returns_story_entities_and_evidence() -> None:
+def test_get_story_returns_story_entities_sources_and_evidence() -> None:
     now = datetime(2026, 9, 16, 18, 0, tzinfo=UTC)
     story_id = uuid4()
     entity_id = uuid4()
+    source_item_id = uuid4()
     evidence_id = uuid4()
     fake_session = FakeSession(
         [
@@ -91,6 +98,10 @@ def test_get_story_returns_story_entities_and_evidence() -> None:
                     "title": "Demo: Rear-stability development",
                     "summary": "Synthetic fixture.",
                     "status": "developing",
+                    "taxonomy": "technical",
+                    "source_count": 1,
+                    "first_published_at": now,
+                    "last_published_at": now,
                     "significance": 60,
                     "confidence": "strong",
                     "what_changed": "A demo update changed the current read.",
@@ -110,6 +121,21 @@ def test_get_story_returns_story_entities_and_evidence() -> None:
                     "confidence": 95,
                     "match_method": "alias",
                     "matched_alias": "Red Bull",
+                }
+            ],
+            [
+                {
+                    "source_item_id": source_item_id,
+                    "provider": "example.com",
+                    "source_type": "article",
+                    "source_class": "independent_editorial",
+                    "title": "Example source story",
+                    "source_url": "https://example.com/story",
+                    "author": "Reporter",
+                    "published_at": now,
+                    "relation_type": "primary",
+                    "cluster_method": "singleton_v1",
+                    "cluster_confidence": 100,
                 }
             ],
             [
@@ -145,6 +171,8 @@ def test_get_story_returns_story_entities_and_evidence() -> None:
     assert payload["slug"] == "demo-rear-stability"
     assert payload["entities"][0]["slug"] == "red-bull-racing"
     assert payload["entities"][0]["matched_alias"] == "Red Bull"
+    assert payload["sources"][0]["provider"] == "example.com"
+    assert payload["sources"][0]["relation_type"] == "primary"
     assert payload["evidence"][0]["presentation_type"] == "documented_change"
     assert (
         payload["evidence"][0]["normalized_claim"]

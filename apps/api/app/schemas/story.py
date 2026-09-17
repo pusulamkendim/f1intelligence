@@ -32,12 +32,30 @@ class StoryEntity(BaseModel):
     matched_alias: str | None = None
 
 
+class StorySourceItem(BaseModel):
+    source_item_id: UUID
+    provider: str
+    source_type: str
+    source_class: str
+    title: str
+    source_url: str | None = None
+    author: str | None = None
+    published_at: datetime | None = None
+    relation_type: str
+    cluster_method: str
+    cluster_confidence: int
+
+
 class StorySummary(BaseModel):
     id: UUID
     slug: str
     title: str
     summary: str | None = None
     status: str
+    taxonomy: str | None = None
+    source_count: int = 0
+    first_published_at: datetime | None = None
+    last_published_at: datetime | None = None
     updated_at: datetime
     evidence_count: int
     latest_evidence_at: datetime | None = None
@@ -49,6 +67,10 @@ class StoryDetail(BaseModel):
     title: str
     summary: str | None = None
     status: str
+    taxonomy: str | None = None
+    source_count: int = 0
+    first_published_at: datetime | None = None
+    last_published_at: datetime | None = None
     significance: int
     confidence: str
     what_changed: str | None = None
@@ -57,4 +79,5 @@ class StoryDetail(BaseModel):
     created_at: datetime
     updated_at: datetime
     entities: list[StoryEntity]
+    sources: list[StorySourceItem]
     evidence: list[EvidenceItem]

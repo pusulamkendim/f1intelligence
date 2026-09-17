@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources materialize-stories list-sources ingest-jolpica ingest-openf1 api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -43,7 +43,8 @@ ingestion-setup:
 		infra/postgres/018_calendar_amendment_safe_race_identity.sql \
 		infra/postgres/019_source_item_entities.sql \
 		infra/postgres/020_story_source_clustering.sql \
-		infra/postgres/021_editorial_person_registry.sql; do \
+		infra/postgres/021_editorial_person_registry.sql \
+		infra/postgres/022_story_materialization.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -51,7 +52,8 @@ ingestion-migrate:
 	@for migration in \
 		infra/postgres/019_source_item_entities.sql \
 		infra/postgres/020_story_source_clustering.sql \
-		infra/postgres/021_editorial_person_registry.sql; do \
+		infra/postgres/021_editorial_person_registry.sql \
+		infra/postgres/022_story_materialization.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -66,6 +68,9 @@ ingest-formula1: ingestion-migrate
 
 ingest-sources: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_sources $${SOURCE:+--source $$SOURCE} --limit $${LIMIT:-20}
+
+materialize-stories: ingestion-migrate
+	cd apps/api && uv run python -m app.ingestion.run_story_materialization --limit $${LIMIT:-500}
 
 list-sources:
 	cd apps/api && uv run python -m app.ingestion.run_sources --list-sources

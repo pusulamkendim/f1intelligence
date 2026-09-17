@@ -2,7 +2,7 @@
 -- Provider identifiers and retrieval metadata are retained so imports are auditable
 -- and can be replayed without coupling public reads to an upstream API.
 
-CREATE TABLE data_sync_runs (
+CREATE TABLE IF NOT EXISTS data_sync_runs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     provider text NOT NULL,
     dataset text NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE data_sync_runs (
     metadata jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
-CREATE INDEX data_sync_runs_lookup_idx
+CREATE INDEX IF NOT EXISTS data_sync_runs_lookup_idx
     ON data_sync_runs(provider, dataset, season, round, started_at DESC);
 
 ALTER TABLE races
@@ -33,11 +33,25 @@ ALTER TABLE races
     ADD COLUMN IF NOT EXISTS source_updated_at timestamptz,
     ADD COLUMN IF NOT EXISTS fetched_at timestamptz;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'races_season_round_unique'
+          AND conrelid = 'races'::regclass
+    ) THEN
+        ALTER TABLE races
+            ADD CONSTRAINT races_season_round_unique UNIQUE (season, round);
+    END IF;
+END
+$$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS races_provider_id_unique_idx
     ON races(provider, provider_race_id)
     WHERE provider IS NOT NULL AND provider_race_id IS NOT NULL;
 
-CREATE TABLE race_results (
+CREATE TABLE IF NOT EXISTS race_results (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     race_id uuid NOT NULL REFERENCES races(id) ON DELETE CASCADE,
     provider text NOT NULL,
@@ -62,10 +76,12 @@ CREATE TABLE race_results (
     UNIQUE (provider, provider_result_id)
 );
 
-CREATE INDEX race_results_race_position_idx ON race_results(race_id, finish_position);
-CREATE INDEX race_results_driver_idx ON race_results(provider, driver_provider_id);
+CREATE INDEX IF NOT EXISTS race_results_race_position_idx
+    ON race_results(race_id, finish_position);
+CREATE INDEX IF NOT EXISTS race_results_driver_idx
+    ON race_results(provider, driver_provider_id);
 
-CREATE TABLE qualifying_results (
+CREATE TABLE IF NOT EXISTS qualifying_results (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     race_id uuid NOT NULL REFERENCES races(id) ON DELETE CASCADE,
     provider text NOT NULL,
@@ -84,9 +100,10 @@ CREATE TABLE qualifying_results (
     UNIQUE (provider, provider_result_id)
 );
 
-CREATE INDEX qualifying_results_race_position_idx ON qualifying_results(race_id, position);
+CREATE INDEX IF NOT EXISTS qualifying_results_race_position_idx
+    ON qualifying_results(race_id, position);
 
-CREATE TABLE driver_standings_snapshots (
+CREATE TABLE IF NOT EXISTS driver_standings_snapshots (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     provider text NOT NULL,
     season integer NOT NULL,
@@ -99,10 +116,10 @@ CREATE TABLE driver_standings_snapshots (
     UNIQUE (provider, season, after_round, content_hash)
 );
 
-CREATE INDEX driver_standings_snapshots_latest_idx
+CREATE INDEX IF NOT EXISTS driver_standings_snapshots_latest_idx
     ON driver_standings_snapshots(provider, season, after_round DESC, fetched_at DESC);
 
-CREATE TABLE driver_standing_rows (
+CREATE TABLE IF NOT EXISTS driver_standing_rows (
     snapshot_id uuid NOT NULL REFERENCES driver_standings_snapshots(id) ON DELETE CASCADE,
     driver_provider_id text NOT NULL,
     position integer NOT NULL,
@@ -114,9 +131,10 @@ CREATE TABLE driver_standing_rows (
     PRIMARY KEY (snapshot_id, driver_provider_id)
 );
 
-CREATE INDEX driver_standing_rows_position_idx ON driver_standing_rows(snapshot_id, position);
+CREATE INDEX IF NOT EXISTS driver_standing_rows_position_idx
+    ON driver_standing_rows(snapshot_id, position);
 
-CREATE TABLE constructor_standings_snapshots (
+CREATE TABLE IF NOT EXISTS constructor_standings_snapshots (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     provider text NOT NULL,
     season integer NOT NULL,
@@ -129,10 +147,10 @@ CREATE TABLE constructor_standings_snapshots (
     UNIQUE (provider, season, after_round, content_hash)
 );
 
-CREATE INDEX constructor_standings_snapshots_latest_idx
+CREATE INDEX IF NOT EXISTS constructor_standings_snapshots_latest_idx
     ON constructor_standings_snapshots(provider, season, after_round DESC, fetched_at DESC);
 
-CREATE TABLE constructor_standing_rows (
+CREATE TABLE IF NOT EXISTS constructor_standing_rows (
     snapshot_id uuid NOT NULL REFERENCES constructor_standings_snapshots(id) ON DELETE CASCADE,
     constructor_provider_id text NOT NULL,
     position integer NOT NULL,
@@ -143,5 +161,5 @@ CREATE TABLE constructor_standing_rows (
     PRIMARY KEY (snapshot_id, constructor_provider_id)
 );
 
-CREATE INDEX constructor_standing_rows_position_idx
+CREATE INDEX IF NOT EXISTS constructor_standing_rows_position_idx
     ON constructor_standing_rows(snapshot_id, position);

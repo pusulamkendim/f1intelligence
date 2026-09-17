@@ -166,7 +166,7 @@ def classify_source_item_entity_candidates(
     return tuple(classifications)
 
 
-def _active_source_context_aliases(
+def _source_context_aliases(
     item: SourceItemText,
     aliases: list[EntityAlias],
 ) -> list[EntityAlias]:
@@ -174,17 +174,13 @@ def _active_source_context_aliases(
     if not team_slug:
         return []
 
-    matches: list[EntityAlias] = []
-    for alias in aliases:
-        if alias.entity_type != "team" or alias.slug != team_slug:
-            continue
-        if item.season is not None:
-            if alias.valid_from_season is not None and item.season < alias.valid_from_season:
-                continue
-            if alias.valid_to_season is not None and item.season > alias.valid_to_season:
-                continue
-        matches.append(alias)
-    return matches
+    # team_slug comes from our source registry, not free text. It is a trusted
+    # canonical identity hint, so do not tie it to publication-year alias validity.
+    return [
+        alias
+        for alias in aliases
+        if alias.entity_type == "team" and alias.slug == team_slug
+    ]
 
 
 def _add_source_context(
@@ -192,7 +188,7 @@ def _add_source_context(
     aliases: list[EntityAlias],
     classifications: tuple[SourceItemEntityClassification, ...],
 ) -> tuple[SourceItemEntityClassification, ...]:
-    context_aliases = _active_source_context_aliases(item, aliases)
+    context_aliases = _source_context_aliases(item, aliases)
     if not context_aliases:
         return classifications
 

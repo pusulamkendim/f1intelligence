@@ -6,13 +6,14 @@ from app.api.routes.context import router as context_router
 from app.api.routes.health import router as health_router
 from app.api.routes.internal_ingestion import router as internal_ingestion_router
 from app.api.routes.stories import router as stories_router
+from app.api.routes.timeline import router as timeline_router
 from app.core.config import get_settings
 
 settings = get_settings()
 
 app = FastAPI(
     title="F1 Intelligence API",
-    version="0.5.0",
+    version="0.6.0",
     docs_url="/docs" if settings.app_env != "production" else None,
     redoc_url=None,
 )
@@ -29,6 +30,7 @@ app.include_router(health_router)
 app.include_router(stories_router)
 app.include_router(catalog_router)
 app.include_router(context_router)
+app.include_router(timeline_router)
 app.include_router(internal_ingestion_router)
 
 

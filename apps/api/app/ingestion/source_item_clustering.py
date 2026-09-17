@@ -131,17 +131,20 @@ def score_same_story(left: ClusterFeatures, right: ClusterFeatures) -> SameStory
     if time_close is False:
         return None
 
-    if similarity >= 0.82 and shared_strong:
-        if time_close is True or similarity >= 0.90:
-            score = 90
-            score += min(4, len(shared_strong) * 2)
-            score += 2 if shared_races else 0
-            score += min(3, max(0, round((similarity - 0.82) * 20)))
-            return SameStoryScore(
-                score=min(98, score),
-                method="title_entity_v1",
-                reasons=reasons,
-            )
+    # With a real publication-time match and a shared subject/directly-involved entity,
+    # a lower lexical threshold is safe enough for a *reviewable candidate*. When one
+    # side lacks a timestamp, retain the much stricter title threshold.
+    near_threshold = 0.68 if time_close is True else 0.90
+    if similarity >= near_threshold and shared_strong:
+        score = 90
+        score += min(4, len(shared_strong) * 2)
+        score += 2 if shared_races else 0
+        score += min(3, max(0, round((similarity - near_threshold) * 10)))
+        return SameStoryScore(
+            score=min(98, score),
+            method="title_entity_v1",
+            reasons=reasons,
+        )
 
     if similarity >= 0.90 and shared_races:
         return SameStoryScore(score=90, method="title_race_v1", reasons=reasons)

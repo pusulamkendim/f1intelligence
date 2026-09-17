@@ -32,6 +32,8 @@ async def list_stories(db: DbSession) -> list[StorySummary]:
                 s.source_count,
                 s.first_published_at,
                 s.last_published_at,
+                s.first_observed_at,
+                s.last_observed_at,
                 s.updated_at,
                 COUNT(e.id)::int AS evidence_count,
                 MAX(COALESCE(e.published_at, e.captured_at)) AS latest_evidence_at
@@ -39,7 +41,12 @@ async def list_stories(db: DbSession) -> list[StorySummary]:
             LEFT JOIN evidence e ON e.story_id = s.id
             WHERE s.merged_into_story_id IS NULL
             GROUP BY s.id
-            ORDER BY COALESCE(s.last_published_at, s.updated_at) DESC, s.title ASC
+            ORDER BY COALESCE(
+                s.last_published_at,
+                s.last_observed_at,
+                s.updated_at
+            ) DESC,
+            s.title ASC
             """
         )
     )
@@ -71,6 +78,8 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
                 s.source_count,
                 s.first_published_at,
                 s.last_published_at,
+                s.first_observed_at,
+                s.last_observed_at,
                 s.significance,
                 s.confidence,
                 s.what_changed,
@@ -181,7 +190,10 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
         evidence_items.append(
             EvidenceItem(
                 id=row["id"],
-                presentation_type=metadata.get("presentation_type", "documented_fact"),
+                presentation_type=metadata.get(
+                    "presentation_type",
+                    "documented_fact",
+                ),
                 source_type=row["source_type"],
                 source_name=row["source_name"],
                 source_url=row["source_url"],

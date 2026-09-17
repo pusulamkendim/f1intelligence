@@ -33,7 +33,9 @@ def _scope_clause(target: ResolvedTarget) -> tuple[str, dict[str, object]]:
         return "p.session_id = :session_id", {"session_id": target.session_id}
     if target_type == "season":
         return "p.season = :season", {"season": target.season}
-    return "p.item_type = 'story' AND p.item_id = :story_id", {"story_id": target.story_id}
+    return "p.item_type = 'story' AND p.item_id = :story_id", {
+        "story_id": target.story_id
+    }
 
 
 async def overlay_story_placements(
@@ -104,8 +106,6 @@ async def overlay_story_placements(
         metadata = dict(row["metadata"] or {})
         metadata.update(
             {
-                "temporal_relation": row["temporal_relation"],
-                "precision": row["precision"],
                 "season": row["season"],
                 "race_key": row["race_key"],
                 "race_label": row["race_label"],
@@ -115,11 +115,6 @@ async def overlay_story_placements(
                 "driver_label": row["driver_label"],
                 "stint_number": row["stint_number"],
                 "lap_number": row["lap_number"],
-                "reported_at": (
-                    row["reported_at"].isoformat()
-                    if row["reported_at"] is not None
-                    else None
-                ),
                 "placement_confidence": row["placement_confidence"],
                 "match_method": row["match_method"],
             }
@@ -129,6 +124,9 @@ async def overlay_story_placements(
                 id=story_id,
                 type="story",
                 occurred_at=row["occurred_at"],
+                temporal_relation=row["temporal_relation"],
+                reported_at=row["reported_at"],
+                precision=row["precision"],
                 label=row["title"],
                 target=ContextTargetRef(
                     type="story",
@@ -138,7 +136,9 @@ async def overlay_story_placements(
                     subtype=row["status"],
                 ),
                 source="timeline_placements",
-                metadata={key: value for key, value in metadata.items() if value is not None},
+                metadata={
+                    key: value for key, value in metadata.items() if value is not None
+                },
                 provenance=(
                     ContextProvenance(
                         provider=row["provider"],

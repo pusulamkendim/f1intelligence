@@ -53,3 +53,13 @@ class ContextResponse(BaseModel):
     timeline: list[dict[str, Any]] = Field(default_factory=list)
     related: list[ContextTargetRef] = Field(default_factory=list)
     provenance: list[ContextProvenance] = Field(default_factory=list)
+
+
+class ContextFacetPage(BaseModel):
+    target: ContextTarget
+    facet: str
+    total: int
+    limit: int
+    offset: int
+    next_offset: int | None = None
+    items: list[dict[str, Any]] = Field(default_factory=list)

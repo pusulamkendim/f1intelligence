@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.context.facets import ContextFacetNotSupportedError, read_context_facet
-from app.context.resolver import ContextNotFoundError, build_context
+from app.context.resolver import ContextNotFoundError
+from app.context.service import build_context
 from app.db.session import get_db
 from app.schemas.context import ContextFacetPage, ContextResponse, ContextTargetType
 

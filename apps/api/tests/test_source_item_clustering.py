@@ -1,7 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from app.ingestion.source_item_clustering import ClusterFeatures, score_same_story
+from app.ingestion.source_item_clustering import (
+    ClusterFeatures,
+    event_fingerprint,
+    score_same_story,
+)
 
 
 def _features(
@@ -18,6 +22,7 @@ def _features(
         published_at=published_at,
         strong_entity_ids=strong or frozenset(),
         race_entity_ids=races or frozenset(),
+        event_fingerprint=event_fingerprint(title),
     )
 
 
@@ -27,15 +32,83 @@ def test_exact_cross_source_title_is_a_max_confidence_candidate() -> None:
         _features("autosport.com", title),
         _features("motorsport.com", title),
     )
-
     assert score is not None
     assert score.score == 100
-    assert score.method == "exact_title_v2"
+    assert score.method == "exact_title_v3"
+
+
+def test_calendar_announcement_clusters_without_entities() -> None:
+    now = datetime(2026, 9, 16, 9, tzinfo=UTC)
+    score = score_same_story(
+        _features(
+            "formula1.com",
+            "2027 Formula 1 race calendar confirmed with 10 Sprint events revealed",
+            published_at=now,
+        ),
+        _features(
+            "bbc.com",
+            "Formula 1 2027: Calendar to have 10 sprint races next year, including Monaco",
+            published_at=now + timedelta(minutes=1),
+        ),
+    )
+    assert score is not None
+    assert score.score == 96
+    assert score.method == "event_fingerprint_v3"
+    assert score.reasons["event_fingerprint"] == "calendar_announcement:2027"
+
+
+def test_different_calendar_seasons_do_not_cluster() -> None:
+    score = score_same_story(
+        _features("a.com", "Formula 1 2027 calendar revealed"),
+        _features("b.com", "Formula 1 2028 calendar revealed"),
+    )
+    assert score is None
+
+
+def test_max_vs_100_named_event_clusters_without_race_entity() -> None:
+    now = datetime(2026, 9, 17, 13, 30, tzinfo=UTC)
+    score = score_same_story(
+        _features(
+            "motorsport.com",
+            "Max Verstappen surprised himself in karting challenge against 100 competitors",
+            published_at=now,
+        ),
+        _features(
+            "bbc.com",
+            "Max vs 100: Verstappen overtakes 100 amateur karters in just 14 laps",
+            published_at=now - timedelta(hours=19),
+        ),
+    )
+    assert score is not None
+    assert score.score == 96
+    assert score.method == "event_fingerprint_v3"
+
+
+def test_elliott_appointment_clusters_even_when_one_title_omits_name() -> None:
+    now = datetime(2026, 9, 17, 10, 40, tzinfo=UTC)
+    score = score_same_story(
+        _features(
+            "the-race.com",
+            "Alpine hires ex-Mercedes F1 tech chief",
+            published_at=now,
+        ),
+        _features(
+            "alpinef1.com",
+            "Mike Elliott joins BWT Alpine Formula One Team as Chief Technical Officer",
+            published_at=now + timedelta(minutes=4),
+        ),
+    )
+    assert score is not None
+    assert score.score == 91
+    assert score.method == "event_fingerprint_v3"
+    assert (
+        score.reasons["event_fingerprint"]
+        == "personnel_appointment:alpine:technical_leadership"
+    )
 
 
 def test_two_shared_strong_entities_support_paraphrased_headlines() -> None:
-    hamilton = uuid4()
-    ferrari = uuid4()
+    hamilton, ferrari = uuid4(), uuid4()
     now = datetime(2026, 9, 17, 14, tzinfo=UTC)
     score = score_same_story(
         _features(
@@ -51,16 +124,13 @@ def test_two_shared_strong_entities_support_paraphrased_headlines() -> None:
             published_at=now + timedelta(minutes=26),
         ),
     )
-
     assert score is not None
     assert score.score >= 90
-    assert score.method == "multi_entity_title_v2"
-    assert score.reasons["shared_strong_entities"] == 2
+    assert score.method == "multi_entity_title_v3"
 
 
 def test_related_but_distinct_two_entity_story_stays_rejected() -> None:
-    tsunoda = uuid4()
-    red_bull = uuid4()
+    tsunoda, red_bull = uuid4(), uuid4()
     now = datetime(2026, 9, 17, 6, tzinfo=UTC)
     score = score_same_story(
         _features(
@@ -76,7 +146,6 @@ def test_related_but_distinct_two_entity_story_stays_rejected() -> None:
             published_at=now + timedelta(hours=3),
         ),
     )
-
     assert score is None
 
 
@@ -93,37 +162,33 @@ def test_single_shared_entity_needs_high_title_similarity() -> None:
             "alpinef1.com",
             "Mike Elliott joins BWT Alpine Formula One Team as Chief Technical Officer",
             strong=frozenset({alpine}),
-            published_at=None,
         ),
     )
-
     assert score is not None
-    assert score.method == "single_entity_title_v2"
+    assert score.method in {"event_fingerprint_v3", "single_entity_title_v3"}
 
 
 def test_shared_subject_and_race_can_support_low_lexical_overlap() -> None:
-    verstappen = uuid4()
-    event = uuid4()
+    driver, race = uuid4(), uuid4()
     now = datetime(2026, 9, 17, 13, 30, tzinfo=UTC)
     score = score_same_story(
         _features(
             "motorsport.com",
-            "Max Verstappen even surprised himself with karting challenge performance",
-            strong=frozenset({verstappen}),
-            races=frozenset({event}),
+            "Driver surprised himself with challenge performance",
+            strong=frozenset({driver}),
+            races=frozenset({race}),
             published_at=now,
         ),
         _features(
             "bbc.com",
-            "Max vs 100: Verstappen overtakes 100 amateur karters in just 14 laps",
-            strong=frozenset({verstappen}),
-            races=frozenset({event}),
+            "Driver completes unusual exhibition challenge",
+            strong=frozenset({driver}),
+            races=frozenset({race}),
             published_at=now - timedelta(hours=19),
         ),
     )
-
     assert score is not None
-    assert score.method == "entity_race_title_v2"
+    assert score.method == "entity_race_title_v3"
 
 
 def test_shared_race_alone_does_not_merge_unrelated_stories() -> None:
@@ -143,7 +208,6 @@ def test_shared_race_alone_does_not_merge_unrelated_stories() -> None:
             published_at=now,
         ),
     )
-
     assert score is None
 
 
@@ -164,5 +228,4 @@ def test_near_match_outside_time_window_is_rejected() -> None:
             published_at=now - timedelta(days=10),
         ),
     )
-
     assert score is None

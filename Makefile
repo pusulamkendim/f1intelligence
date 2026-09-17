@@ -44,7 +44,8 @@ ingestion-setup:
 		infra/postgres/019_source_item_entities.sql \
 		infra/postgres/020_story_source_clustering.sql \
 		infra/postgres/021_editorial_person_registry.sql \
-		infra/postgres/022_story_materialization.sql; do \
+		infra/postgres/022_story_materialization.sql \
+		infra/postgres/023_story_quality_v2.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
@@ -53,7 +54,8 @@ ingestion-migrate:
 		infra/postgres/019_source_item_entities.sql \
 		infra/postgres/020_story_source_clustering.sql \
 		infra/postgres/021_editorial_person_registry.sql \
-		infra/postgres/022_story_materialization.sql; do \
+		infra/postgres/022_story_materialization.sql \
+		infra/postgres/023_story_quality_v2.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 

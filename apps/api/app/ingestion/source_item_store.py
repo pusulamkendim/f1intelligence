@@ -10,7 +10,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.entity_matcher import EntityAlias
-from app.ingestion.source_item_entities import SourceItemEntityClassification
+from app.ingestion.source_item_entities import (
+    SourceItemEntityClassification,
+    SourceItemText,
+    classify_source_item_entities,
+)
 
 
 @dataclass(frozen=True)
@@ -195,3 +199,26 @@ async def reconcile_source_item_entities(
         if result.scalar_one_or_none() is not None:
             written += 1
     return written
+
+
+async def persist_source_item_with_entities(
+    session: AsyncSession,
+    item: SourceItemRecord,
+    *,
+    season: int | None = None,
+    aliases: list[EntityAlias] | None = None,
+) -> tuple[UUID, tuple[SourceItemEntityClassification, ...]]:
+    source_item_id = await upsert_source_item(session, item)
+    entity_aliases = aliases if aliases is not None else await load_entity_aliases(session)
+    classifications = classify_source_item_entities(
+        SourceItemText(
+            title=item.title,
+            standfirst=item.standfirst,
+            summary=item.summary,
+            body_excerpt=item.body_excerpt,
+            season=season,
+        ),
+        entity_aliases,
+    )
+    await reconcile_source_item_entities(session, source_item_id, classifications)
+    return source_item_id, classifications

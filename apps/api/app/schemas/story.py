@@ -56,6 +56,8 @@ class StorySummary(BaseModel):
     source_count: int = 0
     first_published_at: datetime | None = None
     last_published_at: datetime | None = None
+    first_observed_at: datetime | None = None
+    last_observed_at: datetime | None = None
     updated_at: datetime
     evidence_count: int
     latest_evidence_at: datetime | None = None
@@ -71,6 +73,8 @@ class StoryDetail(BaseModel):
     source_count: int = 0
     first_published_at: datetime | None = None
     last_published_at: datetime | None = None
+    first_observed_at: datetime | None = None
+    last_observed_at: datetime | None = None
     significance: int
     confidence: str
     what_changed: str | None = None

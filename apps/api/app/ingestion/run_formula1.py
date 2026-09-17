@@ -13,6 +13,7 @@ from app.db.session import SessionLocal
 from app.ingestion.formula1_com import (
     Formula1Article,
     discover_formula1_article_urls,
+    is_formula1_relevant_article,
     parse_formula1_article,
 )
 from app.ingestion.source_item_store import (
@@ -33,6 +34,7 @@ class IngestionStats:
     discovered: int = 0
     fetched: int = 0
     persisted: int = 0
+    filtered: int = 0
     entity_links: int = 0
     failures: int = 0
 
@@ -118,7 +120,7 @@ async def discover_urls(client: httpx.AsyncClient, *, limit: int, pages: int) ->
     return urls
 
 
-async def fetch_articles(*, limit: int, pages: int) -> tuple[list[Formula1Article], int, int]:
+async def fetch_articles(*, limit: int, pages: int) -> tuple[list[Formula1Article], int, int, int]:
     settings = get_settings()
     headers = {
         "User-Agent": settings.source_user_agent,
@@ -127,6 +129,7 @@ async def fetch_articles(*, limit: int, pages: int) -> tuple[list[Formula1Articl
     }
     articles: list[Formula1Article] = []
     failures = 0
+    filtered = 0
 
     async with httpx.AsyncClient(
         headers=headers,
@@ -137,17 +140,26 @@ async def fetch_articles(*, limit: int, pages: int) -> tuple[list[Formula1Articl
         for url in urls:
             try:
                 response = await _get_with_retries(client, url)
-                articles.append(parse_formula1_article(response.text, requested_url=str(response.url)))
+                article = parse_formula1_article(response.text, requested_url=str(response.url))
+                if not is_formula1_relevant_article(article):
+                    filtered += 1
+                    continue
+                articles.append(article)
             except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 failures += 1
                 logger.warning("Skipping Formula1.com article %s: %s", url, exc)
 
-    return articles, len(urls), failures
+    return articles, len(urls), failures, filtered
 
 
 async def ingest(*, limit: int, pages: int) -> IngestionStats:
-    articles, discovered, failures = await fetch_articles(limit=limit, pages=pages)
-    stats = IngestionStats(discovered=discovered, fetched=len(articles), failures=failures)
+    articles, discovered, failures, filtered = await fetch_articles(limit=limit, pages=pages)
+    stats = IngestionStats(
+        discovered=discovered,
+        fetched=len(articles),
+        filtered=filtered,
+        failures=failures,
+    )
 
     async with SessionLocal() as session:
         async with session.begin():

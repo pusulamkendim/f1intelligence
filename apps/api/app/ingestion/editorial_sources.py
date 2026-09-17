@@ -27,6 +27,8 @@ class EditorialSource:
     article_path_pattern: str | None = None
     rights_policy: str = "metadata_summary_excerpt_only"
     team_slug: str | None = None
+    enabled: bool = True
+    disabled_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +208,9 @@ class _MetadataParser(HTMLParser):
         self.meta: dict[str, str] = {}
         self.canonical_url: str | None = None
         self.language: str | None = None
+        self.page_title: str | None = None
+        self._in_title = False
+        self._title_parts: list[str] = []
         self._json_ld = False
         self._json_parts: list[str] = []
         self.json_documents: list[Any] = []
@@ -215,6 +220,9 @@ class _MetadataParser(HTMLParser):
         lower = tag.casefold()
         if lower == "html" and values.get("lang"):
             self.language = values["lang"]
+        elif lower == "title":
+            self._in_title = True
+            self._title_parts = []
         elif lower == "meta":
             key = values.get("property") or values.get("name")
             content = values.get("content")
@@ -229,9 +237,18 @@ class _MetadataParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._json_ld:
             self._json_parts.append(data)
+        elif self._in_title:
+            self._title_parts.append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.casefold() != "script" or not self._json_ld:
+        lower = tag.casefold()
+        if lower == "title" and self._in_title:
+            value = " ".join("".join(self._title_parts).split())
+            self.page_title = value or None
+            self._in_title = False
+            self._title_parts = []
+            return
+        if lower != "script" or not self._json_ld:
             return
         raw = "".join(self._json_parts).strip()
         self._json_ld = False
@@ -289,7 +306,12 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
     canonical_url = str(
         parser.canonical_url or node.get("url") or parser.meta.get("og:url") or requested_url
     ).split("?", 1)[0].rstrip("/")
-    title = node.get("headline") or parser.meta.get("og:title") or parser.meta.get("twitter:title")
+    title = (
+        node.get("headline")
+        or parser.meta.get("og:title")
+        or parser.meta.get("twitter:title")
+        or parser.page_title
+    )
     if not isinstance(title, str) or not title.strip():
         raise ValueError(f"{source.key} article has no usable title")
 

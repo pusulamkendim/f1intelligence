@@ -8,6 +8,7 @@ from app.api.routes.internal_ingestion import router as internal_ingestion_route
 from app.api.routes.statistics import router as statistics_router
 from app.api.routes.stories import router as stories_router
 from app.api.routes.timeline import router as timeline_router
+from app.api.routes.visualizations import router as visualizations_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -33,6 +34,7 @@ app.include_router(catalog_router)
 app.include_router(context_router)
 app.include_router(timeline_router)
 app.include_router(statistics_router)
+app.include_router(visualizations_router)
 app.include_router(internal_ingestion_router)
 
 

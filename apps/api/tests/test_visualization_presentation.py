@@ -86,9 +86,13 @@ async def test_sector_chart_uses_sector_dispatch_not_stint_fallback(monkeypatch)
     async def fake_annotations(db, session_id):
         return []
 
+    async def fake_provenance(db, session_id, tables):
+        return []
+
     monkeypatch.setattr(service, "_session", fake_session)
     monkeypatch.setattr(service, "_driver_rows", fake_driver_rows)
     monkeypatch.setattr(service, "_annotations", fake_annotations)
+    monkeypatch.setattr(service, "_dataset_provenance", fake_provenance)
 
     response = await service.race_visualization(
         None,

@@ -83,6 +83,32 @@ _FUTURE_TERMS = (
     "preview",
 )
 
+_RACE_EVENT_TERMS = (
+    "grand prix",
+    " gp ",
+    "formula 1",
+    "f1",
+    "race",
+    "qualifying",
+    "practice",
+    "pole",
+    "grid",
+    "pit stop",
+    "pitstop",
+    "vsc",
+    "virtual safety car",
+    "safety car",
+    "tyre",
+    "tire",
+    "debrief",
+    "recap",
+    "preview",
+    "weekend",
+    "overtaking",
+    "victory",
+    "wins",
+)
+
 _RACE_LAP_TERMS = (
     "vsc",
     "virtual safety car",
@@ -222,7 +248,11 @@ def infer_story_coordinate(
 
     if future_season and taxonomy == "regulation":
         temporal_relation = "effective_from"
-    elif future_season or (anchor_is_future and has_future_language):
+    elif (
+        future_season
+        or (race_season is not None and has_future_language)
+        or (anchor_is_future and has_future_language)
+    ):
         temporal_relation = "scheduled_for"
     elif lap_number or stint_number or session_code:
         temporal_relation = "occurred_at"
@@ -312,10 +342,47 @@ async def _story_races(session: AsyncSession, story_id: UUID):
                 ) AS anchor_at,
                 se.relation_type,
                 se.confidence,
-                se.matched_alias
+                COALESCE(ev.matched_alias, se.matched_alias) AS matched_alias,
+                COALESCE(ev.alias_type, 'unknown') AS alias_type,
+                COALESCE(ev.detected_in, ARRAY[]::text[]) AS detected_in,
+                COALESCE(ev.evidence_confidence, se.confidence)
+                    AS evidence_confidence
             FROM story_entities se
             JOIN entities e ON e.id = se.entity_id
             JOIN races r ON r.entity_id = e.id
+            LEFT JOIN LATERAL (
+                SELECT
+                    sie.matched_alias,
+                    sie.confidence AS evidence_confidence,
+                    sie.detected_in,
+                    COALESCE(ea.alias_type, 'unknown') AS alias_type
+                FROM story_source_items ssi
+                JOIN source_item_entities sie
+                  ON sie.source_item_id = ssi.source_item_id
+                 AND sie.entity_id = se.entity_id
+                LEFT JOIN entity_aliases ea
+                  ON ea.entity_id = sie.entity_id
+                 AND lower(ea.alias) = lower(sie.matched_alias)
+                 AND ea.enabled = true
+                WHERE ssi.story_id = se.story_id
+                  AND sie.match_method <> 'source_context'
+                ORDER BY
+                    CASE
+                        WHEN 'title' = ANY(sie.detected_in) THEN 4
+                        WHEN 'standfirst' = ANY(sie.detected_in) THEN 3
+                        WHEN 'summary' = ANY(sie.detected_in) THEN 2
+                        ELSE 1
+                    END DESC,
+                    CASE COALESCE(ea.alias_type, '')
+                        WHEN 'race_name' THEN 4
+                        WHEN 'canonical' THEN 3
+                        WHEN 'venue' THEN 2
+                        ELSE 1
+                    END DESC,
+                    sie.confidence DESC,
+                    length(COALESCE(sie.matched_alias, '')) DESC
+                LIMIT 1
+            ) ev ON true
             WHERE se.story_id = :story_id
               AND se.relation_type <> 'mentioned'
             ORDER BY
@@ -326,7 +393,7 @@ async def _story_races(session: AsyncSession, story_id: UUID):
                     WHEN 'context' THEN 4
                     ELSE 5
                 END,
-                se.confidence DESC,
+                COALESCE(ev.evidence_confidence, se.confidence) DESC,
                 r.season DESC,
                 r.round NULLS LAST
             """
@@ -334,6 +401,55 @@ async def _story_races(session: AsyncSession, story_id: UUID):
         {"story_id": story_id},
     )
     return list(result.mappings().all())
+
+
+def _race_scope_rank(race: dict) -> int:
+    detected = set(race.get("detected_in") or [])
+    if "title" in detected:
+        return 4
+    if "standfirst" in detected:
+        return 3
+    if "summary" in detected:
+        return 2
+    return 1
+
+
+def _race_alias_rank(race: dict) -> int:
+    return {
+        "race_name": 4,
+        "canonical": 3,
+        "venue": 2,
+    }.get(str(race.get("alias_type") or ""), 1)
+
+
+def _has_race_event_language(value: str) -> bool:
+    normalized = f" {_normalized(value)} "
+    return any(term in normalized for term in _RACE_EVENT_TERMS)
+
+
+def _race_anchor_is_eligible(
+    race: dict,
+    *,
+    title_value: str,
+) -> bool:
+    alias_type = str(race.get("alias_type") or "")
+    detected = set(race.get("detected_in") or [])
+
+    if alias_type in {"race_name", "canonical"}:
+        return bool(detected.intersection({"title", "standfirst", "summary"}))
+
+    if alias_type == "venue":
+        if "title" not in detected:
+            return False
+        return _has_race_event_language(title_value) or any(
+            term in _normalized(title_value)
+            for term in _FUTURE_TERMS
+        )
+
+    return "title" in detected and _strong_race_title_match(
+        race,
+        title_value,
+    )
 
 
 def _strong_race_title_match(
@@ -353,6 +469,7 @@ def _select_story_race(
     races: list[dict],
     *,
     text_value: str,
+    title_value: str | None = None,
     reported_at: datetime | None,
 ) -> dict | None:
     if not races:
@@ -368,11 +485,23 @@ def _select_story_race(
         races = historical_matches
 
     normalized = _normalized(text_value)
+    canonical_title = title_value or text_value
+    races = [
+        race
+        for race in races
+        if _race_anchor_is_eligible(
+            race,
+            title_value=canonical_title,
+        )
+    ]
+    if not races:
+        return None
+
     if any(term in normalized for term in _NON_F1_EVENT_TERMS):
         strong_matches = [
             race
             for race in races
-            if _strong_race_title_match(race, text_value)
+            if _strong_race_title_match(race, canonical_title)
         ]
         if not strong_matches:
             return None
@@ -394,10 +523,11 @@ def _select_story_race(
                 key=lambda race: race["anchor_at"],
             )
 
+    title_normalized = _normalized(canonical_title)
     title_matches = []
     for race in races:
         alias = _normalized(str(race.get("matched_alias") or ""))
-        if alias and alias in normalized:
+        if alias and alias in title_normalized:
             title_matches.append(race)
     if len(title_matches) == 1:
         return title_matches[0]
@@ -407,7 +537,13 @@ def _select_story_race(
     return sorted(
         races,
         key=lambda race: (
-            -int(race["confidence"]),
+            -_race_scope_rank(race),
+            -_race_alias_rank(race),
+            -int(
+                race.get("evidence_confidence")
+                or race.get("confidence")
+                or 0
+            ),
             race["season"],
             race["round"] or 999,
         ),
@@ -556,6 +692,7 @@ async def refresh_story_timeline_placement(
     race = _select_story_race(
         [dict(row) for row in race_candidates],
         text_value=text_value,
+        title_value=str(story["title"]),
         reported_at=reported_at,
     )
     inference = infer_story_coordinate(

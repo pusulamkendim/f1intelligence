@@ -226,3 +226,30 @@ def test_empty_statistics_do_not_invent_rates_or_averages() -> None:
     assert stats.win_rate is None
     assert stats.podium_rate is None
     assert stats.championships == 0
+
+
+
+def test_poles_follow_main_race_grid_while_qualifying_p1_is_separate() -> None:
+    stats = aggregate_driver_statistics(
+        [
+            DriverResult(
+                2021,
+                10,
+                1,
+                1,
+                Decimal("25"),
+                "Finished",
+                None,
+            )
+        ],
+        qualifying=[
+            DriverQualifying(
+                2021,
+                10,
+                2,
+            )
+        ],
+    )
+
+    assert stats.poles == 1
+    assert stats.qualifying_p1s == 0

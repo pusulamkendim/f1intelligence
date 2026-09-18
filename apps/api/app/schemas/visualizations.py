@@ -42,8 +42,11 @@ class VisualizationColumn(BaseModel):
 
 class VisualizationPresentation(BaseModel):
     preset: RenderPreset
+    theme: str = "f1-timing-dark"
     dense: bool = True
     dark_preferred: bool = True
+    tabular_numbers: bool = True
+    team_color_rail: bool = True
     driver_label_mode: Literal["acronym", "full"] = "acronym"
     show_legend: bool = True
     show_annotations: bool = True

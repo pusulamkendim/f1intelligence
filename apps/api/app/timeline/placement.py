@@ -12,6 +12,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 PLACEMENT_METHOD = "story_coordinate_v1"
 
 _SEASON_RE = re.compile(r"\b(20\d{2})\b")
+_HISTORICAL_EVENT_PATTERNS = (
+    re.compile(r"\bon this day in\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(
+        r"\b(20\d{2})\b.{0,24}\b(?:grand prix|gp)\b",
+        re.IGNORECASE,
+    ),
+)
+_NON_F1_EVENT_TERMS = (
+    "formula 2",
+    "formula 3",
+    "f2",
+    "f3",
+    "f1 academy",
+    "le mans",
+    "hypercar",
+    "wec",
+    "sxsw",
+)
 _LAP_RE = re.compile(r"\b(?:lap|lap number)\s*#?\s*(\d{1,3})\b", re.IGNORECASE)
 _STINT_RE = re.compile(r"\bstint\s*#?\s*(\d{1,2})\b", re.IGNORECASE)
 _ORDINAL_STINTS = {
@@ -97,6 +115,54 @@ def explicit_season(value: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def explicit_f1_season(value: str) -> int | None:
+    normalized = _normalized(value)
+    years = [int(match.group(1)) for match in _SEASON_RE.finditer(normalized)]
+    for year in years:
+        token = str(year)
+        strong_patterns = (
+            rf"\b{token}\s+(?:formula 1|f1)\b",
+            rf"\b(?:formula 1|f1)\s+{token}\b",
+            rf"\b{token}\s+(?:formula 1|f1)\s+"
+            rf"(?:season|car|calendar|opener|regulations?|rules?|budget|project)\b",
+            rf"\b{token}\s+season\b",
+            rf"\b(?:season|regulations?|rules?)\s+(?:for\s+)?{token}\b",
+            rf"\b{token}\s+(?:grand prix|gp|opener)\b",
+            rf"\b(?:grand prix|gp|opener)\s+{token}\b",
+        )
+        if any(re.search(pattern, normalized) for pattern in strong_patterns):
+            return year
+
+        year_index = normalized.find(token)
+        local = normalized[
+            max(0, year_index - 32) : year_index + len(token) + 32
+        ]
+        if any(term in local for term in _NON_F1_EVENT_TERMS):
+            continue
+        if (
+            ("f1" in normalized or "formula 1" in normalized)
+            and any(
+                phrase in local
+                for phrase in (
+                    f"{token} development",
+                    f"{token} car",
+                    f"{token} calendar",
+                    f"{token} budget",
+                )
+            )
+        ):
+            return year
+    return None
+
+
+def explicit_historical_event_year(value: str) -> int | None:
+    for pattern in _HISTORICAL_EVENT_PATTERNS:
+        match = pattern.search(value)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def infer_session_code(value: str) -> str | None:
     normalized = _normalized(value)
     if normalized == "sprint":
@@ -132,7 +198,7 @@ def infer_story_coordinate(
     race_season: int | None,
     race_anchor_at: datetime | None,
 ) -> PlacementInference:
-    stated_season = explicit_season(text_value)
+    stated_season = explicit_f1_season(text_value)
     default_season = (
         race_season
         or stated_season
@@ -230,7 +296,7 @@ async def _story_row(session: AsyncSession, story_id: UUID):
     return result.mappings().first()
 
 
-async def _story_race(session: AsyncSession, story_id: UUID):
+async def _story_races(session: AsyncSession, story_id: UUID):
     result = await session.execute(
         text(
             """
@@ -239,13 +305,19 @@ async def _story_race(session: AsyncSession, story_id: UUID):
                 r.season,
                 r.slug,
                 r.official_name,
-                COALESCE(r.start_at, r.weekend_start_date::timestamptz) AS anchor_at,
+                r.round,
+                COALESCE(
+                    r.start_at,
+                    r.weekend_start_date::timestamptz
+                ) AS anchor_at,
                 se.relation_type,
-                se.confidence
+                se.confidence,
+                se.matched_alias
             FROM story_entities se
             JOIN entities e ON e.id = se.entity_id
             JOIN races r ON r.entity_id = e.id
             WHERE se.story_id = :story_id
+              AND se.relation_type <> 'mentioned'
             ORDER BY
                 CASE se.relation_type
                     WHEN 'subject' THEN 1
@@ -257,12 +329,90 @@ async def _story_race(session: AsyncSession, story_id: UUID):
                 se.confidence DESC,
                 r.season DESC,
                 r.round NULLS LAST
-            LIMIT 1
             """
         ),
         {"story_id": story_id},
     )
-    return result.mappings().first()
+    return list(result.mappings().all())
+
+
+def _strong_race_title_match(
+    race: dict,
+    text_value: str,
+) -> bool:
+    alias = _normalized(str(race.get("matched_alias") or ""))
+    title = _normalized(text_value)
+    if not alias or alias not in title:
+        return False
+    return "grand prix" in alias or bool(
+        re.search(r"\bgp\b", alias)
+    )
+
+
+def _select_story_race(
+    races: list[dict],
+    *,
+    text_value: str,
+    reported_at: datetime | None,
+) -> dict | None:
+    if not races:
+        return None
+
+    historical_year = explicit_historical_event_year(text_value)
+    if historical_year is not None:
+        historical_matches = [
+            race for race in races if race["season"] == historical_year
+        ]
+        if not historical_matches:
+            return None
+        races = historical_matches
+
+    normalized = _normalized(text_value)
+    if any(term in normalized for term in _NON_F1_EVENT_TERMS):
+        strong_matches = [
+            race
+            for race in races
+            if _strong_race_title_match(race, text_value)
+        ]
+        if not strong_matches:
+            return None
+        races = strong_matches
+
+    has_future_language = any(
+        term in normalized for term in _FUTURE_TERMS
+    )
+    if reported_at is not None and has_future_language:
+        future_races = [
+            race
+            for race in races
+            if race["anchor_at"] is not None
+            and race["anchor_at"] >= reported_at
+        ]
+        if future_races:
+            return min(
+                future_races,
+                key=lambda race: race["anchor_at"],
+            )
+
+    title_matches = [
+        race
+        for race in races
+        if _normalized(str(race.get("matched_alias") or ""))
+        in normalized
+    ]
+    if len(title_matches) == 1:
+        return title_matches[0]
+    if title_matches:
+        races = title_matches
+
+    return sorted(
+        races,
+        key=lambda race: (
+            -int(race["confidence"]),
+            race["season"],
+            race["round"] or 999,
+        ),
+    )[0]
 
 
 async def _session_for_code(
@@ -395,7 +545,6 @@ async def refresh_story_timeline_placement(
         {"story_id": story_id, "match_method": PLACEMENT_METHOD},
     )
 
-    race = await _story_race(session, story_id)
     reported_at = (
         story["first_published_at"]
         or story["first_observed_at"]
@@ -403,6 +552,12 @@ async def refresh_story_timeline_placement(
     )
     text_value = " ".join(
         part for part in (story["title"], story["summary"]) if part
+    )
+    race_candidates = await _story_races(session, story_id)
+    race = _select_story_race(
+        [dict(row) for row in race_candidates],
+        text_value=text_value,
+        reported_at=reported_at,
     )
     inference = infer_story_coordinate(
         text_value=text_value,
@@ -434,15 +589,28 @@ async def refresh_story_timeline_placement(
     driver_entity_id = driver["id"] if driver else None
 
     precision = inference.precision
+    temporal_relation = inference.temporal_relation
+    confidence = inference.confidence
+    reason = inference.reason
     if precision in {"lap", "stint", "session"} and session_row is None:
-        precision = "race" if race_id is not None else "season"
+        if race_id is not None:
+            precision = "race"
+        else:
+            precision = "timestamp"
+            temporal_relation = "reported_at"
+            confidence = 80
+            reason = "unresolved_session_fallback"
     if precision == "stint" and driver_entity_id is None:
-        precision = "session" if session_row else ("race" if race_id else "season")
+        precision = "session" if session_row else ("race" if race_id else "timestamp")
 
     anchor_at = (
         session_row["starts_at"]
         if session_row
-        else (race["anchor_at"] if race else None)
+        else (
+            race["anchor_at"]
+            if race is not None and race_id is not None
+            else None
+        )
     )
     if session_id is not None and precision in {"lap", "stint"}:
         anchor_at, _ = await _deep_anchor(
@@ -455,7 +623,7 @@ async def refresh_story_timeline_placement(
         )
 
     timeline_at = anchor_at
-    if inference.temporal_relation == "reported_at" and timeline_at is None:
+    if temporal_relation == "reported_at" and timeline_at is None:
         timeline_at = reported_at
 
     await session.execute(
@@ -500,7 +668,7 @@ async def refresh_story_timeline_placement(
         ),
         {
             "story_id": story_id,
-            "temporal_relation": inference.temporal_relation,
+            "temporal_relation": temporal_relation,
             "precision": precision,
             "season": inference.season,
             "race_id": race_id,
@@ -510,17 +678,21 @@ async def refresh_story_timeline_placement(
             "lap_number": inference.lap_number if precision == "lap" else None,
             "timeline_at": timeline_at,
             "reported_at": reported_at,
-            "confidence": inference.confidence,
+            "confidence": confidence,
             "match_method": PLACEMENT_METHOD,
             "metadata": json.dumps(
                 {
-                    "reason": inference.reason,
+                    "reason": reason,
                     "session_code": (
                         session_row["session_code"]
                         if session_row
                         else None
                     ),
-                    "race_key": race["slug"] if race else None,
+                    "race_key": (
+                        race["slug"]
+                        if race is not None and race_id is not None
+                        else None
+                    ),
                     "driver_key": driver["slug"] if driver else None,
                 }
             ),

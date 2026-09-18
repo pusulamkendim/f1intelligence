@@ -61,3 +61,51 @@ def test_f1_fansite_parser_keeps_origin_and_rights_metadata() -> None:
     assert item.origin_provider == "red_bull_content_pool"
     assert item.origin_asset_id == "SI202606070445"
     assert item.rights_note == "editorial use only"
+
+
+
+def test_f1_fansite_parser_rejects_page_thumbnails_and_affiliate_banners() -> None:
+    html = """
+    <article>
+      <h1>Photos of Friday Practice before the 2026 Italian F1 GP</h1>
+      <img src="/wp-content/uploads/2026/09/18-friday-monza-2026-330x220.jpg" alt="thumbnail" />
+      <img src="/wp-content/uploads/2026/07/F1-Launch_Refresh2_Static_Affiliate_728x90_US-EN.jpg" alt="Try F1 on Apple TV" />
+      <figure>
+        <a href="/wp-content/uploads/2026/09/32-friday-monza-2026-990x660.jpg">
+          <img src="/wp-content/uploads/2026/09/32-friday-monza-2026-330x220.jpg" alt="Lewis Hamilton on track" />
+        </a>
+        <figcaption>Lewis Hamilton on track at Monza</figcaption>
+      </figure>
+    </article>
+    """
+
+    items = parse_gallery_html(
+        html,
+        gallery_url=(
+            "https://www.f1-fansite.com/f1-wallpaper/"
+            "photos-of-friday-practice-before-the-2026-italian-f1-gp/"
+        ),
+    )
+
+    assert len(items) == 1
+    assert items[0].image_url.endswith("32-friday-monza-2026-990x660.jpg")
+    assert items[0].caption == "Lewis Hamilton on track at Monza"
+
+
+def test_f1_fansite_parser_rejects_small_figure_without_full_asset() -> None:
+    html = """
+    <article>
+      <h1>2026 British F1 GP</h1>
+      <figure>
+        <img src="/wp-content/uploads/2026/07/20-thursday-silverstone-2026-330x220.jpg" alt="thumbnail only" />
+      </figure>
+    </article>
+    """
+
+    assert parse_gallery_html(
+        html,
+        gallery_url=(
+            "https://www.f1-fansite.com/f1-wallpaper/"
+            "photos-of-the-2026-british-f1-gp/"
+        ),
+    ) == []

@@ -532,6 +532,209 @@ async def _starting_grid_series(
     ]
 
 
+async def _timing_tower_series(
+    session: AsyncSession,
+    session_id: Any,
+) -> list[dict[str, Any]]:
+    result = await session.execute(
+        text(
+            """
+            SELECT se.driver_number,
+                   se.name_acronym AS driver_acronym,
+                   e.slug AS driver_key,
+                   COALESCE(e.display_name, se.full_name) AS driver_label,
+                   te.slug AS team_key,
+                   COALESCE(te.display_name, se.team_name) AS team_label,
+                   se.team_colour AS team_color,
+                   pos.position,
+                   iv.gap_to_leader_seconds,
+                   iv.gap_to_leader_text,
+                   iv.interval_seconds,
+                   iv.interval_text,
+                   lap.lap_number,
+                   lap.lap_duration_seconds,
+                   stint.stint_number,
+                   stint.lap_start,
+                   stint.lap_end,
+                   stint.compound,
+                   stint.tyre_age_at_start
+            FROM session_entries se
+            LEFT JOIN entities e ON e.id = se.driver_entity_id
+            LEFT JOIN entities te ON te.id = se.team_entity_id
+            LEFT JOIN LATERAL (
+                SELECT p.position
+                FROM session_positions p
+                WHERE p.session_id = se.session_id
+                  AND p.provider_driver_number = se.driver_number
+                ORDER BY p.observed_at DESC
+                LIMIT 1
+            ) pos ON true
+            LEFT JOIN LATERAL (
+                SELECT i.gap_to_leader_seconds,
+                       i.gap_to_leader_text,
+                       i.interval_seconds,
+                       i.interval_text
+                FROM session_intervals i
+                WHERE i.session_id = se.session_id
+                  AND i.provider_driver_number = se.driver_number
+                ORDER BY i.observed_at DESC
+                LIMIT 1
+            ) iv ON true
+            LEFT JOIN LATERAL (
+                SELECT l.lap_number, l.lap_duration_seconds
+                FROM session_laps l
+                WHERE l.session_id = se.session_id
+                  AND l.provider_driver_number = se.driver_number
+                ORDER BY l.lap_number DESC
+                LIMIT 1
+            ) lap ON true
+            LEFT JOIN LATERAL (
+                SELECT s.stint_number,
+                       s.lap_start,
+                       s.lap_end,
+                       s.compound,
+                       s.tyre_age_at_start
+                FROM session_stints s
+                WHERE s.session_id = se.session_id
+                  AND s.provider_driver_number = se.driver_number
+                  AND (
+                      lap.lap_number IS NULL
+                      OR s.lap_end IS NULL
+                      OR lap.lap_number BETWEEN s.lap_start AND s.lap_end
+                  )
+                ORDER BY s.stint_number DESC
+                LIMIT 1
+            ) stint ON true
+            WHERE se.session_id = :session_id
+            ORDER BY pos.position NULLS LAST, se.driver_number
+            """
+        ),
+        {"session_id": session_id},
+    )
+    series = []
+    for row in result.mappings().all():
+        tyre_age = row["tyre_age_at_start"]
+        if (
+            tyre_age is not None
+            and row["lap_number"] is not None
+            and row["lap_start"] is not None
+        ):
+            tyre_age += max(row["lap_number"] - row["lap_start"], 0)
+        gap = row["gap_to_leader_text"]
+        if gap is None and row["gap_to_leader_seconds"] is not None:
+            gap = float(row["gap_to_leader_seconds"])
+        interval = row["interval_text"]
+        if interval is None and row["interval_seconds"] is not None:
+            interval = float(row["interval_seconds"])
+        series.append(
+            {
+                "key": row["driver_key"] or f'car-{row["driver_number"]}',
+                "label": row["driver_label"] or f'Car {row["driver_number"]}',
+                "unit": "position",
+                "driver_number": row["driver_number"],
+                "driver_acronym": row["driver_acronym"],
+                "team_key": row["team_key"],
+                "team_label": row["team_label"],
+                "color": normalize_team_color(row["team_color"]),
+                "points": [
+                    {
+                        "position": row["position"],
+                        "gap": gap,
+                        "gap_seconds": row["gap_to_leader_seconds"],
+                        "interval": interval,
+                        "interval_seconds": row["interval_seconds"],
+                        "lap": row["lap_number"],
+                        "last_lap_seconds": row["lap_duration_seconds"],
+                        "stint": row["stint_number"],
+                        "compound": row["compound"],
+                        "compound_token": tyre_semantic_token(row["compound"]),
+                        "tyre_age": tyre_age,
+                    }
+                ],
+            }
+        )
+    return series
+
+
+async def _session_result_series(
+    session: AsyncSession,
+    session_id: Any,
+) -> list[dict[str, Any]]:
+    result = await session.execute(
+        text(
+            """
+            SELECT sr.position,
+                   sr.duration_seconds,
+                   sr.q1_seconds,
+                   sr.q2_seconds,
+                   sr.q3_seconds,
+                   sr.gap_to_leader_seconds,
+                   sr.gap_to_leader_text,
+                   sr.q1_gap_seconds,
+                   sr.q2_gap_seconds,
+                   sr.q3_gap_seconds,
+                   sr.number_of_laps,
+                   sr.dnf,
+                   sr.dns,
+                   sr.dsq,
+                   se.driver_number,
+                   se.name_acronym AS driver_acronym,
+                   e.slug AS driver_key,
+                   COALESCE(e.display_name, se.full_name) AS driver_label,
+                   te.slug AS team_key,
+                   COALESCE(te.display_name, se.team_name) AS team_label,
+                   se.team_colour AS team_color
+            FROM session_results sr
+            LEFT JOIN session_entries se
+              ON se.session_id = sr.session_id
+             AND se.driver_number = sr.driver_number
+            LEFT JOIN entities e
+              ON e.id = COALESCE(sr.driver_entity_id, se.driver_entity_id)
+            LEFT JOIN entities te
+              ON te.id = COALESCE(sr.team_entity_id, se.team_entity_id)
+            WHERE sr.session_id = :session_id
+            ORDER BY sr.position NULLS LAST, sr.driver_number
+            """
+        ),
+        {"session_id": session_id},
+    )
+    series = []
+    for row in result.mappings().all():
+        status = "DSQ" if row["dsq"] else "DNS" if row["dns"] else "DNF" if row["dnf"] else "CLASSIFIED"
+        gap = row["gap_to_leader_text"]
+        if gap is None and row["gap_to_leader_seconds"] is not None:
+            gap = float(row["gap_to_leader_seconds"])
+        series.append(
+            {
+                "key": row["driver_key"] or f'car-{row["driver_number"]}',
+                "label": row["driver_label"] or f'Car {row["driver_number"]}',
+                "unit": "position",
+                "driver_number": row["driver_number"],
+                "driver_acronym": row["driver_acronym"],
+                "team_key": row["team_key"],
+                "team_label": row["team_label"],
+                "color": normalize_team_color(row["team_color"]),
+                "points": [
+                    {
+                        "position": row["position"],
+                        "duration_seconds": row["duration_seconds"],
+                        "gap": gap,
+                        "gap_seconds": row["gap_to_leader_seconds"],
+                        "number_of_laps": row["number_of_laps"],
+                        "q1_seconds": row["q1_seconds"],
+                        "q2_seconds": row["q2_seconds"],
+                        "q3_seconds": row["q3_seconds"],
+                        "q1_gap_seconds": row["q1_gap_seconds"],
+                        "q2_gap_seconds": row["q2_gap_seconds"],
+                        "q3_gap_seconds": row["q3_gap_seconds"],
+                        "status": status,
+                    }
+                ],
+            }
+        )
+    return series
+
+
 async def race_visualization(
     session: AsyncSession,
     race_key: str,
@@ -680,7 +883,7 @@ async def race_visualization(
             "overtakes",
             show_legend=False,
         )
-    else:
+    elif chart == "starting-grid":
         series = await _starting_grid_series(session, session_id)
         chart_type = "timing_table"
         x_axis = _axis(
@@ -692,6 +895,55 @@ async def race_visualization(
         y_axis = _axis("driver", "Driver")
         presentation = _presentation(
             "starting-grid",
+            show_annotations=False,
+        )
+    elif chart == "segments":
+        rows = await _driver_rows(
+            session,
+            session_id,
+            "session_laps",
+            "d.lap_number, d.segments_sector_1, "
+            "d.segments_sector_2, d.segments_sector_3",
+        )
+        series = segment_series(rows)
+        chart_type = "timing_table"
+        x_axis = _axis("lap", "Lap", unit="lap", formatter="integer")
+        y_axis = _axis("segment", "Mini-sector")
+        presentation = _presentation(
+            "mini-sector-timing",
+            show_annotations=False,
+        )
+    elif chart == "timing-tower":
+        series = await _timing_tower_series(session, session_id)
+        chart_type = "timing_table"
+        x_axis = _axis(
+            "position",
+            "Position",
+            unit="position",
+            formatter="position",
+        )
+        y_axis = _axis(
+            "driver",
+            "Driver",
+            direction="reversed",
+        )
+        presentation = _presentation(
+            "timing-tower",
+            show_legend=False,
+        )
+    else:
+        series = await _session_result_series(session, session_id)
+        chart_type = "timing_table"
+        x_axis = _axis(
+            "position",
+            "Position",
+            unit="position",
+            formatter="position",
+        )
+        y_axis = _axis("driver", "Driver")
+        presentation = _presentation(
+            "session-classification",
+            show_legend=False,
             show_annotations=False,
         )
 

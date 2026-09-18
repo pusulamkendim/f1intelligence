@@ -3,6 +3,8 @@ from app.visualizations.series import (
     normalize_team_color,
     position_series,
     sector_series,
+    segment_semantic_token,
+    segment_series,
     stint_series,
     tyre_semantic_token,
 )
@@ -129,3 +131,33 @@ def test_stint_series_preserves_compound_range_and_token():
     point = result[0]["points"][0]
     assert point["compound"] == "MEDIUM"
     assert point["compound_token"] == "tyre-medium"
+
+
+def test_openf1_mini_sector_codes_map_to_f1_timing_tokens():
+    assert segment_semantic_token(2048) == "timing-yellow"
+    assert segment_semantic_token(2049) == "timing-green"
+    assert segment_semantic_token(2051) == "timing-purple"
+    assert segment_semantic_token(2064) == "pit-lane"
+    assert segment_semantic_token(2050) == "segment-unknown"
+
+
+def test_segment_series_preserves_sector_boundaries_and_raw_codes():
+    result = segment_series(
+        [
+            row(
+                lap_number=1,
+                segments_sector_1=[2049, 2051],
+                segments_sector_2=[2048],
+                segments_sector_3=[2064],
+            )
+        ]
+    )
+    point = result[0]["points"][0]
+    assert point["sector_1"][0] == {
+        "index": 1,
+        "code": 2049,
+        "token": "timing-green",
+    }
+    assert point["sector_1"][1]["token"] == "timing-purple"
+    assert point["sector_2"][0]["token"] == "timing-yellow"
+    assert point["sector_3"][0]["token"] == "pit-lane"

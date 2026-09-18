@@ -54,8 +54,8 @@ ingest-media: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_media_discovery --gallery-limit ${GALLERY_LIMIT:-3} --asset-limit ${ASSET_LIMIT:-100}
 
 materialize-stories: ingestion-migrate
-	cd apps/api && uv run python -m app.ingestion.run_story_materialization --limit ${LIMIT:-500}
-	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit ${LIMIT:-500}
+	cd apps/api && uv run python -m app.ingestion.run_story_materialization ${LIMIT:+--limit $LIMIT}
+	cd apps/api && uv run python -m app.ingestion.run_timeline_placements ${TIMELINE_LIMIT:+--limit $TIMELINE_LIMIT}
 
 materialize-timeline: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${LIMIT:-500}

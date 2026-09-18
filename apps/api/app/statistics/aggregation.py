@@ -62,7 +62,7 @@ class DriverStatistics:
     sprint_entries: int
     sprint_starts: int
     sprint_wins: int
-    sprint_podiums: int
+    sprint_top3s: int
     average_grid: float | None
     average_finish: float | None
     average_classification_position: float | None
@@ -224,7 +224,7 @@ def aggregate_driver_statistics(
 
     pole_rounds = {
         (row.season, row.round)
-        for row in started_rows
+        for row in result_rows
         if row.grid_position == 1
     }
     qualifying_p1_rounds = {
@@ -246,7 +246,7 @@ def aggregate_driver_statistics(
     sprint_wins = sum(
         row.finish_position == 1 for row in sprint_rows
     )
-    sprint_podiums = sum(
+    sprint_top3s = sum(
         row.finish_position is not None and row.finish_position <= 3
         for row in sprint_rows
     )
@@ -270,7 +270,7 @@ def aggregate_driver_statistics(
         sprint_entries=len(sprint_rows),
         sprint_starts=len(sprint_started),
         sprint_wins=sprint_wins,
-        sprint_podiums=sprint_podiums,
+        sprint_top3s=sprint_top3s,
         average_grid=(sum(grids) / len(grids)) if grids else None,
         average_finish=(
             sum(classified_finishes) / len(classified_finishes)

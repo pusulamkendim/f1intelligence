@@ -199,6 +199,17 @@ async def _fetch_source_items(
     return items, len(urls), failures
 
 
+def _reset_transaction_stats(stats: SourceStats) -> None:
+    stats.persisted = 0
+    stats.entity_links = 0
+    stats.cluster_candidates = 0
+    stats.stories_created = 0
+    stats.stories_attached = 0
+    stats.stories_existing = 0
+    stats.stories_merged = 0
+    stats.stories_skipped = 0
+
+
 def _record_story_action(stats: SourceStats, action: str) -> None:
     if action == "created":
         stats.stories_created += 1
@@ -295,6 +306,7 @@ async def ingest_source(source: EditorialSource, *, limit: int) -> SourceStats:
                     )
                     _record_story_action(stats, materialized.action)
     except Exception as exc:  # source isolation: one provider must not abort the whole run
+        _reset_transaction_stats(stats)
         stats.failures += 1
         stats.error = f"{type(exc).__name__}: {exc}"
         logger.exception("Source ingestion failed for %s", source.key)

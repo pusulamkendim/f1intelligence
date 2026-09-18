@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -482,12 +483,7 @@ async def refresh_story_timeline_placement(
                 :confidence,
                 :match_method,
                 true,
-                jsonb_strip_nulls(jsonb_build_object(
-                    'reason', :reason,
-                    'session_code', :session_code,
-                    'race_key', :race_key,
-                    'driver_key', :driver_key
-                ))
+                jsonb_strip_nulls(CAST(:metadata AS jsonb))
             )
             """
         ),
@@ -505,9 +501,17 @@ async def refresh_story_timeline_placement(
             "reported_at": reported_at,
             "confidence": inference.confidence,
             "match_method": PLACEMENT_METHOD,
-            "reason": inference.reason,
-            "session_code": session_row["session_code"] if session_row else None,
-            "race_key": race["slug"] if race else None,
-            "driver_key": driver["slug"] if driver else None,
+            "metadata": json.dumps(
+                {
+                    "reason": inference.reason,
+                    "session_code": (
+                        session_row["session_code"]
+                        if session_row
+                        else None
+                    ),
+                    "race_key": race["slug"] if race else None,
+                    "driver_key": driver["slug"] if driver else None,
+                }
+            ),
         },
     )

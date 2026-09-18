@@ -1,9 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
 from app.ingestion.source_item_clustering import (
     ClusterFeatures,
     event_fingerprint,
+    refresh_cluster_candidates,
     score_same_story,
 )
 
@@ -250,3 +253,48 @@ def test_named_event_fingerprint_survives_historical_replay_window() -> None:
     assert score is not None
     assert score.method == "event_fingerprint_v3"
     assert score.score == 96
+
+
+
+class _EmptyMappingsResult:
+    def mappings(self):
+        return self
+
+    def all(self):
+        return []
+
+
+class _CaptureSession:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    async def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        return _EmptyMappingsResult()
+
+
+@pytest.mark.asyncio
+async def test_nullable_event_fingerprint_is_explicitly_typed() -> None:
+    session = _CaptureSession()
+    features = ClusterFeatures(
+        provider="example.com",
+        title="Generic F1 story without a named event",
+        published_at=None,
+        strong_entity_ids=frozenset(),
+        race_entity_ids=frozenset(),
+        event_fingerprint=None,
+    )
+
+    written = await refresh_cluster_candidates(
+        session,  # type: ignore[arg-type]
+        source_item_id=uuid4(),
+        features=features,
+    )
+
+    assert written == 0
+    candidate_sql = session.statements[2]
+    assert "CAST(:event_fingerprint AS text) IS NOT NULL" in candidate_sql
+    assert (
+        "= CAST(:event_fingerprint AS text)"
+        in candidate_sql
+    )

@@ -130,6 +130,7 @@ async def race_classification(
                 "unit": "position",
                 "driver_number": row["driver_number"],
                 "driver_acronym": row["driver_acronym"],
+                "classification_position": row["position"],
                 "team_key": row["team_key"],
                 "team_label": row["team_label"],
                 "color": normalize_team_color(row["team_color"]),
@@ -207,6 +208,7 @@ async def race_classification(
                 "unit": "position",
                 "driver_number": row["driver_number"],
                 "driver_acronym": row["driver_acronym"],
+                "classification_position": points[-1]["position"],
                 "team_key": row["team_key"],
                 "team_label": row["team_label"],
                 "color": normalize_team_color(row["team_color"]),
@@ -408,7 +410,9 @@ async def season_standings(
         x_axis=_axis("round", "Round", unit="round", formatter="integer"),
         y_axis=_axis("points", "Points", unit="points", formatter="raw"),
         presentation=_presentation(
-            "championship-standings",
+            "championship-standings"
+            if kind == "driver-standings"
+            else "constructor-standings",
             show_annotations=False,
         ),
         series=series,

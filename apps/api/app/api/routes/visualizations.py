@@ -14,7 +14,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/races/{race_key}/{chart}", response_model=VisualizationResponse)
 async def race_chart(
     race_key: str,
-    chart: Literal["positions", "lap-times", "stints"],
+    chart: Literal["positions", "lap-times", "stints", "sectors", "speeds", "intervals", "pit-stops", "weather", "overtakes", "starting-grid"],
     db: DbSession,
     session_code: Annotated[str, Query()] = "race",
 ) -> VisualizationResponse:

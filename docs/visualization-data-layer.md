@@ -26,6 +26,9 @@ The visualization API converts canonical F1 data into presentation-ready semanti
 - weather — air/track temperature, humidity, pressure, wind and rainfall
 - overtakes — event stream
 - starting-grid — position, driver, team and qualifying time
+- segments — S1/S2/S3 mini-sector strips using OpenF1 segment codes
+- timing-tower — position, gap, interval, last lap, tyre compound and tyre age in one dense view
+- session-result — OpenF1 session classification for race, sprint, qualifying or practice
 - race-control annotations — flags, Safety Car/VSC, DRS and related messages
 
 ## Historical/classic views
@@ -37,6 +40,8 @@ The visualization API converts canonical F1 data into presentation-ready semanti
 - driver season results — qualifying/grid/finish/points trend by round
 
 These views use canonical Jolpica-backed result and standings tables, so classic result pages remain available even where OpenF1 granular telemetry is unavailable.
+
+OpenF1 mini-sector segments are not available during races. Known codes are surfaced as yellow, green, purple, unavailable and pit-lane semantic tokens; unknown codes are preserved as neutral `segment-unknown` rather than guessed.
 
 ## API
 

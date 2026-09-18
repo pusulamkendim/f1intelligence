@@ -129,3 +129,22 @@ def test_formula1_article_maps_to_source_item_contract() -> None:
     assert item.standfirst == "The team reviews the package after qualifying."
     assert item.rights_policy == RIGHTS_POLICY
     assert item.content_hash == article.content_hash
+
+
+
+def test_formula1_article_captures_image_reference_without_reuse_permission() -> None:
+    html = """
+    <html><head>
+      <meta property="og:url" content="https://www.formula1.com/en/latest/article/example.IMG123" />
+      <meta property="og:title" content="Race story" />
+      <meta property="og:image" content="https://media.formula1.com/image.jpg" />
+    </head></html>
+    """
+
+    article = parse_formula1_article(
+        html,
+        requested_url="https://www.formula1.com/en/latest/article/example.IMG123",
+    )
+
+    assert article.raw_metadata["image_url"] == "https://media.formula1.com/image.jpg"
+    assert article.raw_metadata["image_source"] == "open_graph"

@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.content_cleanup import clean_summary, clean_title
+from app.ingestion.media_assets import refresh_story_media_from_sources
 from app.ingestion.source_item_clustering import cluster_features, refresh_cluster_candidates
 from app.ingestion.source_item_entities import SourceItemEntityClassification
 
@@ -514,6 +515,53 @@ async def _merge_auto_stories(
     await session.execute(
         text(
             """
+            INSERT INTO story_media_candidates (
+                story_id,
+                media_asset_id,
+                story_role,
+                match_reason,
+                confidence,
+                selected,
+                manual_override,
+                metadata
+            )
+            SELECT
+                :survivor,
+                media_asset_id,
+                story_role,
+                match_reason,
+                confidence,
+                selected,
+                manual_override,
+                metadata
+            FROM story_media_candidates
+            WHERE story_id = :loser
+            ON CONFLICT (story_id, media_asset_id, story_role) DO UPDATE SET
+                confidence = GREATEST(
+                    story_media_candidates.confidence,
+                    EXCLUDED.confidence
+                ),
+                selected = (
+                    story_media_candidates.selected
+                    OR EXCLUDED.selected
+                ),
+                manual_override = (
+                    story_media_candidates.manual_override
+                    OR EXCLUDED.manual_override
+                ),
+                metadata = story_media_candidates.metadata || EXCLUDED.metadata,
+                updated_at = now()
+            """
+        ),
+        {"survivor": survivor, "loser": loser},
+    )
+    await session.execute(
+        text("DELETE FROM story_media_candidates WHERE story_id = :loser"),
+        {"loser": loser},
+    )
+    await session.execute(
+        text(
+            """
             UPDATE stories
             SET merged_into_story_id = :survivor,
                 status = 'superseded',
@@ -909,6 +957,7 @@ async def materialize_source_item(
         cluster_confidence=cluster_confidence,
     )
     await refresh_story_aggregate(session, story_id)
+    await refresh_story_media_from_sources(session, story_id)
     return StoryMaterializationResult(action, story_id, decision.taxonomy)
 
 

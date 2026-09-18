@@ -46,6 +46,23 @@ class StorySourceItem(BaseModel):
     cluster_confidence: int
 
 
+class StoryMediaCandidate(BaseModel):
+    media_asset_id: UUID
+    story_role: str
+    content_role: str
+    url: str
+    caption: str | None = None
+    source_provider: str
+    origin_provider: str | None = None
+    photographer: str | None = None
+    agency: str | None = None
+    rights_status: str
+    storage_policy: str
+    match_reason: str
+    confidence: int
+    selected: bool = False
+
+
 class StorySummary(BaseModel):
     id: UUID
     slug: str
@@ -61,6 +78,8 @@ class StorySummary(BaseModel):
     updated_at: datetime
     evidence_count: int
     latest_evidence_at: datetime | None = None
+    hero_media_asset_id: UUID | None = None
+    hero_image_url: str | None = None
 
 
 class StoryDetail(BaseModel):
@@ -85,3 +104,4 @@ class StoryDetail(BaseModel):
     entities: list[StoryEntity]
     sources: list[StorySourceItem]
     evidence: list[EvidenceItem]
+    media: list[StoryMediaCandidate]

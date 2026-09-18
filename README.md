@@ -105,4 +105,4 @@ FIA official RSS
   -> direct source link back to FIA
 ```
 
-The next implementation slice is MediaAsset attachment, followed by additional official-source adapters and a proper editorial ingestion review queue.
+The current media slice records source-article image URLs, rights-aware MediaAssets and Story media candidates, and adds metadata-only F1-Fansite discovery. Binary object storage remains deliberately deferred behind the R2-ready storage boundary.

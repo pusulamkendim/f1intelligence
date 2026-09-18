@@ -1,7 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
 from app.ingestion.openf1 import OpenF1Session
-from app.ingestion.run_openf1 import _bounded_candidates, _location_candidates, _result_candidates, _telemetry_candidates
+from app.ingestion.run_openf1 import (
+    _bounded_candidates,
+    _location_candidates,
+    _result_candidates,
+    _telemetry_candidates,
+)
 
 NOW = datetime(2026, 9, 17, 12, tzinfo=UTC)
 

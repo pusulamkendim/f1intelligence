@@ -1,4 +1,4 @@
-from app.ingestion.openf1_telemetry import parse_laps, parse_positions, parse_stints
+from app.ingestion.openf1_telemetry import parse_laps, parse_locations, parse_positions, parse_stints
 
 
 def test_parse_laps_preserves_provider_identity_and_richer_context() -> None:
@@ -21,4 +21,52 @@ def test_parse_positions_requires_timestamp_and_position() -> None:
     rows = parse_positions([{"session_key": 999, "driver_number": 1, "date": "2026-09-13T12:30:01Z", "position": 2}, {"session_key": 999, "driver_number": 4, "position": 3}])
     assert len(rows) == 1
     assert rows[0].position == 2
+    assert rows[0].observed_at.tzinfo is not None
+
+
+
+def test_parse_locations_downsamples_each_driver_independently() -> None:
+    rows = parse_locations(
+        [
+            {
+                "session_key": 999,
+                "driver_number": 1,
+                "date": "2026-09-13T12:30:00.000Z",
+                "x": 100,
+                "y": 200,
+                "z": 10,
+            },
+            {
+                "session_key": 999,
+                "driver_number": 1,
+                "date": "2026-09-13T12:30:00.300Z",
+                "x": 110,
+                "y": 210,
+                "z": 11,
+            },
+            {
+                "session_key": 999,
+                "driver_number": 4,
+                "date": "2026-09-13T12:30:00.400Z",
+                "x": 500,
+                "y": 600,
+                "z": 20,
+            },
+            {
+                "session_key": 999,
+                "driver_number": 1,
+                "date": "2026-09-13T12:30:01.100Z",
+                "x": 130,
+                "y": 230,
+                "z": 13,
+            },
+        ],
+        sample_interval_ms=1000,
+    )
+
+    assert [(row.driver_number, row.x, row.y) for row in rows] == [
+        (1, 100, 200),
+        (1, 130, 230),
+        (4, 500, 600),
+    ]
     assert rows[0].observed_at.tzinfo is not None

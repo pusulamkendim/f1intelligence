@@ -387,7 +387,7 @@ async def season_standings(
         metadata[key] = row
 
     series = []
-    for key, points in sorted(grouped.items()):
+    for key, points in grouped.items():
         row = metadata[key]
         series.append(
             {
@@ -403,6 +403,15 @@ async def season_standings(
                 "points": sorted(points, key=lambda point: point["round"]),
             }
         )
+
+    series.sort(
+        key=lambda item: (
+            item["classification_position"]
+            if item["classification_position"] is not None
+            else 999,
+            item["label"],
+        )
+    )
 
     return VisualizationResponse(
         key=f"{season}:{kind}",

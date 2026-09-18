@@ -118,18 +118,14 @@ def _points_by_season(
     sprints: list[DriverSprintResult],
     standings: list[DriverSeasonStanding],
 ) -> Decimal:
-    race_by_season: dict[int, Decimal] = {}
-    sprint_by_season: dict[int, Decimal] = {}
+    race_by_season: dict[int, list[DriverResult]] = {}
+    sprint_by_season: dict[int, list[DriverSprintResult]] = {}
     standings_by_season = {row.season: row for row in standings}
 
     for row in results:
-        race_by_season[row.season] = (
-            race_by_season.get(row.season, Decimal("0")) + row.points
-        )
+        race_by_season.setdefault(row.season, []).append(row)
     for row in sprints:
-        sprint_by_season[row.season] = (
-            sprint_by_season.get(row.season, Decimal("0")) + row.points
-        )
+        sprint_by_season.setdefault(row.season, []).append(row)
 
     seasons = (
         set(race_by_season)
@@ -139,13 +135,41 @@ def _points_by_season(
     total = Decimal("0")
     for season in seasons:
         standing = standings_by_season.get(season)
-        if standing is not None:
-            total += standing.points
-        else:
-            total += race_by_season.get(season, Decimal("0"))
-            total += sprint_by_season.get(season, Decimal("0"))
-    return total
+        if standing is None:
+            total += sum(
+                (
+                    row.points
+                    for row in race_by_season.get(season, [])
+                ),
+                Decimal("0"),
+            )
+            total += sum(
+                (
+                    row.points
+                    for row in sprint_by_season.get(season, [])
+                ),
+                Decimal("0"),
+            )
+            continue
 
+        total += standing.points
+        total += sum(
+            (
+                row.points
+                for row in race_by_season.get(season, [])
+                if row.round > standing.after_round
+            ),
+            Decimal("0"),
+        )
+        total += sum(
+            (
+                row.points
+                for row in sprint_by_season.get(season, [])
+                if row.round > standing.after_round
+            ),
+            Decimal("0"),
+        )
+    return total
 
 def aggregate_driver_statistics(
     results: Iterable[DriverResult],

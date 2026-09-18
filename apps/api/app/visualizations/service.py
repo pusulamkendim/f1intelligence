@@ -49,6 +49,42 @@ CLASSIC_F1_TOKENS = {
     "drs": "#39E75F",
 }
 
+CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
+    "sector-timing": [
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "lap", "label": "LAP", "formatter": "integer"},
+        {"key": "s1_seconds", "label": "S1", "formatter": "lap-time", "status_key": "s1_status"},
+        {"key": "s2_seconds", "label": "S2", "formatter": "lap-time", "status_key": "s2_status"},
+        {"key": "s3_seconds", "label": "S3", "formatter": "lap-time", "status_key": "s3_status"},
+    ],
+    "speed-comparison": [
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "lap", "label": "LAP", "formatter": "integer"},
+        {"key": "i1_kph", "label": "I1", "formatter": "speed"},
+        {"key": "i2_kph", "label": "I2", "formatter": "speed"},
+        {"key": "speed_trap_kph", "label": "ST", "formatter": "speed"},
+    ],
+    "stint-strategy": [
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "compound", "label": "TYRE", "align": "center"},
+        {"key": "lap_start", "label": "FROM", "formatter": "integer"},
+        {"key": "lap_end", "label": "TO", "formatter": "integer"},
+        {"key": "tyre_age_at_start", "label": "AGE", "formatter": "integer"},
+    ],
+    "pit-stop": [
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "lap", "label": "LAP", "formatter": "integer"},
+        {"key": "stop_seconds", "label": "STOP", "formatter": "delta"},
+        {"key": "pit_lane_seconds", "label": "PIT LANE", "formatter": "delta"},
+    ],
+    "starting-grid": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "team", "label": "TEAM", "align": "left"},
+        {"key": "qualifying_seconds", "label": "TIME", "formatter": "lap-time"},
+    ],
+}
+
 
 class VisualizationNotFoundError(ValueError):
     pass
@@ -271,8 +307,10 @@ def _presentation(
         "preset": preset,
         "dense": True,
         "dark_preferred": True,
+        "driver_label_mode": "acronym",
         "show_legend": show_legend,
         "show_annotations": show_annotations,
+        "columns": CLASSIC_COLUMNS.get(preset, []),
         "semantic_tokens": CLASSIC_F1_TOKENS,
     }
 

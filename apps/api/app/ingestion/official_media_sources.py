@@ -156,7 +156,37 @@ def discover_source_pages(
     return parser.urls
 
 
-def _srcset_candidates(value: str | None, *, base_url: str) -> list[tuple[str, int]]:
+def _normalize_image_url(value: str, *, base_url: str) -> str:
+    absolute = urljoin(base_url, value)
+    parsed = urlparse(absolute)
+    if parsed.path.casefold() == "/_next/image":
+        target = parse_qs(parsed.query).get("url", [None])[0]
+        if target:
+            absolute = urljoin(base_url, unquote(target))
+    return absolute
+
+
+def _source_allows_image(
+    source: OfficialMediaSource | None,
+    url: str,
+) -> bool:
+    if source is None:
+        return True
+    parsed = urlparse(url)
+    host = parsed.netloc.casefold()
+    path = parsed.path.casefold()
+    if source.key == "williams":
+        if host.endswith("mcprod.williamsf1.com") and "/media/catalog/product/" in path:
+            return False
+    return True
+
+
+def _srcset_candidates(
+    value: str | None,
+    *,
+    base_url: str,
+    source: OfficialMediaSource | None = None,
+) -> list[tuple[str, int]]:
     if not value:
         return []
     output: list[tuple[str, int]] = []
@@ -164,7 +194,9 @@ def _srcset_candidates(value: str | None, *, base_url: str) -> list[tuple[str, i
         bits = part.strip().split()
         if not bits:
             continue
-        url = urljoin(base_url, bits[0])
+        url = _normalize_image_url(bits[0], base_url=base_url)
+        if not _source_allows_image(source, url):
+            continue
         width = 0
         if len(bits) > 1 and bits[1].lower().endswith("w"):
             try:
@@ -198,12 +230,19 @@ def _low_value_image(url: str, *, width_hint: int = 0) -> bool:
     return False
 
 
-def _image_href(value: str | None, *, base_url: str) -> str | None:
+def _image_href(
+    value: str | None,
+    *,
+    base_url: str,
+    source: OfficialMediaSource | None = None,
+) -> str | None:
     if not value:
         return None
-    absolute = urljoin(base_url, value)
+    absolute = _normalize_image_url(value, base_url=base_url)
     clean = urlparse(absolute).path.casefold()
     if not clean.endswith(IMAGE_EXTENSIONS):
+        return None
+    if not _source_allows_image(source, absolute):
         return None
     return absolute
 
@@ -212,10 +251,17 @@ def _best_img_candidate(
     attrs: dict[str, str],
     *,
     base_url: str,
+    source: OfficialMediaSource | None = None,
 ) -> tuple[str, int] | None:
     candidates: list[tuple[str, int]] = []
     for key in ("srcset", "data-srcset", "data-lazy-srcset"):
-        candidates.extend(_srcset_candidates(attrs.get(key), base_url=base_url))
+        candidates.extend(
+            _srcset_candidates(
+                attrs.get(key),
+                base_url=base_url,
+                source=source,
+            )
+        )
 
     for key, score in (
         ("data-full-url", 10_000),
@@ -226,7 +272,9 @@ def _best_img_candidate(
     ):
         value = attrs.get(key)
         if value:
-            candidates.append((urljoin(base_url, value), score))
+            candidate_url = _normalize_image_url(value, base_url=base_url)
+            if _source_allows_image(source, candidate_url):
+                candidates.append((candidate_url, score))
 
     candidates = [
         (url, width)
@@ -237,6 +285,75 @@ def _best_img_candidate(
     if not candidates:
         return None
     return max(candidates, key=lambda item: item[1])
+
+
+def _event_key(value: str | None) -> tuple[int, str] | None:
+    if not value:
+        return None
+    match = _EVENT_RE.search(" ".join(value.split()))
+    if not match:
+        return None
+    year = int(match.group(1))
+    name = " ".join(match.group(2).casefold().split())
+    return year, name
+
+
+def _published_year(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = _YEAR_RE.search(value)
+    return int(match.group(1)) if match else None
+
+
+def _asset_family_key(
+    url: str,
+    *,
+    source: OfficialMediaSource | None,
+) -> str:
+    if source is not None and source.key == "alpine":
+        filename = urlparse(url).path.rsplit("/", 1)[-1]
+        match = _ALPINE_VARIANT_RE.match(filename)
+        if match:
+            return f"alpine:{match.group(1).casefold()}"
+    return url
+
+
+def _asset_variant_rank(
+    url: str,
+    *,
+    source: OfficialMediaSource | None,
+) -> int:
+    if source is not None and source.key == "alpine":
+        filename = urlparse(url).path.rsplit("/", 1)[-1]
+        match = _ALPINE_VARIANT_RE.match(filename)
+        if match:
+            return {"t": 1, "m": 2, "l": 3}.get(match.group(2).casefold(), 0)
+    size = _filename_size(url)
+    if size:
+        return size[0] * size[1]
+    return 0
+
+
+def _caption_matches_page_event(
+    *,
+    source: OfficialMediaSource | None,
+    page_title: str | None,
+    caption: str | None,
+) -> bool:
+    page_event = _event_key(page_title)
+    caption_event = _event_key(caption)
+    if page_event and caption_event and page_event != caption_event:
+        return False
+    if (
+        source is not None
+        and source.key == "alpine"
+        and page_event
+        and caption
+        and caption.casefold().startswith("image -")
+        and caption_event is None
+    ):
+        return False
+    return True
 
 
 def _credit_metadata(

@@ -190,3 +190,44 @@ def pit_stop_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         },
         "seconds",
     )
+
+
+SEGMENT_TOKENS = {
+    0: "segment-unavailable",
+    2048: "timing-yellow",
+    2049: "timing-green",
+    2051: "timing-purple",
+    2064: "pit-lane",
+}
+
+
+def segment_semantic_token(value: int | None) -> str:
+    if value is None:
+        return "segment-unavailable"
+    return SEGMENT_TOKENS.get(int(value), "segment-unknown")
+
+
+def _segment_payload(values: Any) -> list[dict[str, Any]]:
+    if not isinstance(values, list):
+        return []
+    return [
+        {
+            "index": index + 1,
+            "code": int(value) if value is not None else None,
+            "token": segment_semantic_token(value),
+        }
+        for index, value in enumerate(values)
+    ]
+
+
+def segment_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _series(
+        rows,
+        lambda r: {
+            "lap": int(r["lap_number"]),
+            "sector_1": _segment_payload(r.get("segments_sector_1")),
+            "sector_2": _segment_payload(r.get("segments_sector_2")),
+            "sector_3": _segment_payload(r.get("segments_sector_3")),
+        },
+        "segment",
+    )

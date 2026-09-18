@@ -60,24 +60,30 @@ CLASSIC_F1_TOKENS = {
 }
 
 CHART_DATASETS: dict[str, tuple[str, ...]] = {
-    "positions": ("session_positions", "session_laps"),
-    "lap-times": ("session_laps",),
-    "stints": ("session_stints",),
-    "sectors": ("session_laps",),
-    "speeds": ("session_laps",),
-    "intervals": ("session_intervals",),
-    "pit-stops": ("session_pit_stops",),
+    "positions": (
+        "session_entries",
+        "session_starting_grid",
+        "session_positions",
+        "session_laps",
+    ),
+    "lap-times": ("session_entries", "session_laps"),
+    "stints": ("session_entries", "session_stints"),
+    "sectors": ("session_entries", "session_laps"),
+    "speeds": ("session_entries", "session_laps"),
+    "intervals": ("session_entries", "session_intervals"),
+    "pit-stops": ("session_entries", "session_pit_stops"),
     "weather": ("session_weather",),
-    "overtakes": ("session_overtakes",),
-    "starting-grid": ("session_starting_grid",),
-    "segments": ("session_laps",),
+    "overtakes": ("session_entries", "session_overtakes"),
+    "starting-grid": ("session_entries", "session_starting_grid"),
+    "segments": ("session_entries", "session_laps"),
     "timing-tower": (
+        "session_entries",
         "session_positions",
         "session_intervals",
         "session_laps",
         "session_stints",
     ),
-    "session-result": ("session_results",),
+    "session-result": ("session_entries", "session_results"),
 }
 
 CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {

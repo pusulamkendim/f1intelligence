@@ -65,6 +65,15 @@ MEDIA_SOURCE_POLICIES: dict[str, MediaSourcePolicy] = {
         rights_evidence_url="https://media.alpinecars.com/?lang=eng",
         notes="First-party media-centre discovery source; verify asset-specific terms before reuse.",
     ),
+    "redbullracing.com": MediaSourcePolicy(
+        key="redbullracing.com",
+        source_role="discovery",
+        rights_status="restricted",
+        storage_policy="metadata_only",
+        usage_scope="unknown",
+        rights_evidence_url="https://www.redbullracing.com/int-en",
+        notes="Official Oracle Red Bull Racing portrait discovery source; publication rights remain restricted.",
+    ),
     "mclaren.com": MediaSourcePolicy(
         key="mclaren.com",
         source_role="discovery",

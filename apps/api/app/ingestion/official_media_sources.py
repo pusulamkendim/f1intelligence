@@ -83,7 +83,7 @@ OFFICIAL_MEDIA_SOURCES: tuple[OfficialMediaSource, ...] = (
         provider="media.alpinecars.com",
         discovery_url="https://media.alpinecars.com/?lang=eng",
         allowed_hosts=("media.alpinecars.com", "www.media.alpinecars.com"),
-        page_path_pattern=r"^/2026-formula-one-.+",
+        page_path_pattern=r"^/20\\d{2}-formula-one-.+",
         team_slug="alpine",
         rights_evidence_url="https://media.alpinecars.com/?lang=eng",
     ),

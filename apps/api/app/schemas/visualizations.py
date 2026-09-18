@@ -16,6 +16,7 @@ RenderPreset = Literal[
     "overtakes",
     "starting-grid",
     "championship-standings",
+    "constructor-standings",
     "driver-season-results",
     "race-classification",
     "qualifying-classification",

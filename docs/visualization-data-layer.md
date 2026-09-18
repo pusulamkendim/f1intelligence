@@ -29,6 +29,7 @@ The visualization API converts canonical F1 data into presentation-ready semanti
 - segments — S1/S2/S3 mini-sector strips using OpenF1 segment codes
 - timing-tower — position, gap, interval, last lap, tyre compound and tyre age in one dense view
 - session-result — OpenF1 session classification for race, sprint, qualifying or practice
+- track-map — time-addressable driver tracker using OpenF1 x/y/z locations, team colours, position, gap and lap context
 - race-control annotations — flags, Safety Car/VSC, DRS and related messages
 
 ## Historical/classic views
@@ -49,6 +50,10 @@ Race/session and classification:
 
 `GET /api/v1/visualizations/races/{race_key}/{chart}?session_code=race`
 
+Driver tracker defaults to the latest available frame and accepts an historical timestamp:
+
+`GET /api/v1/visualizations/races/{race_key}/track-map?session_code=race&at={iso_timestamp}`
+
 Season standings:
 
 `GET /api/v1/visualizations/seasons/{season}/{driver-standings|constructor-standings}`
@@ -63,10 +68,14 @@ Existing canonical/OpenF1 tables remain the source of truth. The visualization l
 
 Raw payloads, ingestion audit rows, aliases, documents and source/story metadata are provenance/content infrastructure and are intentionally not promoted to user-facing chart families.
 
+## Driver tracker semantics
+
+OpenF1 location samples are canonicalized into `session_locations`. Historical ingestion is downsampled to approximately 1 Hz per driver to keep season-scale storage practical while remaining smooth enough for interpolated replay. The upstream location feed is more frequent; a future live transport can use the higher-rate stream without changing this contract.
+
+The map returns provider-native Cartesian coordinates, session bounds and a `reference_path` derived from the fastest valid observed lap. That reference path is explicitly marked as derived driving data, not official circuit geometry. OpenF1 location is suitable for progress around the circuit but not precise left/right placement.
+
 ## Known source gaps before full live-timing parity
 
-The current database does not ingest OpenF1 `location` samples, so a live driver-tracker / circuit-map view cannot yet be produced from canonical data.
+The current database does not ingest high-frequency OpenF1 `car_data`, so throttle/brake/gear/DRS telemetry traces are intentionally outside this PR.
 
-The current database also does not ingest high-frequency OpenF1 `car_data`, so speed/throttle/brake/gear/DRS telemetry traces are intentionally outside this PR.
-
-Circuit artwork/geometry and other visual assets belong to the media layer rather than this visualization-data PR.
+Official circuit artwork/geometry and photography belong to the media layer; the driver tracker can render from the derived reference path until that asset exists.

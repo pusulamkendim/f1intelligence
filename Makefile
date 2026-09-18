@@ -51,10 +51,10 @@ ingest-sources: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${TIMELINE_LIMIT:-500}
 
 ingest-media: ingestion-migrate
-	cd apps/api && uv run python -m app.ingestion.run_media_discovery ${MEDIA_SOURCE:+--source $MEDIA_SOURCE} --page-limit ${GALLERY_LIMIT:-3} --asset-limit ${ASSET_LIMIT:-100}
+	cd apps/api && uv run python -m app.ingestion.run_media_discovery $${MEDIA_SOURCE:+--source $$MEDIA_SOURCE} --page-limit $${GALLERY_LIMIT:-3} --asset-limit $${ASSET_LIMIT:-100}
 
 ingest-driver-media: ingestion-migrate
-	cd apps/api && uv run python -m app.ingestion.run_driver_media --season ${SEASON:-2026}
+	cd apps/api && uv run python -m app.ingestion.run_driver_media --season $${SEASON:-2026}
 
 materialize-stories: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_story_materialization $${LIMIT:+--limit $$LIMIT}

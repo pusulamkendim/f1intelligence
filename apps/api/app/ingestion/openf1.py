@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from app.ingestion.openf1_telemetry import parse_laps, parse_positions, parse_stints
+from app.ingestion.openf1_telemetry import parse_laps, parse_locations, parse_positions, parse_stints
 
 OPENF1_BASE_URL = "https://api.openf1.org/v1"
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
@@ -213,3 +213,9 @@ class OpenF1Client:
 
     async def positions(self, session_key: int):
         return parse_positions(await self._get("position", session_key=session_key))
+
+    async def locations(self, session_key: int, *, sample_interval_ms: int = 1000):
+        return parse_locations(
+            await self._get("location", session_key=session_key),
+            sample_interval_ms=sample_interval_ms,
+        )

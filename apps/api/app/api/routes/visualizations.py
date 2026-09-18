@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -32,6 +33,7 @@ RaceChart = Literal[
     "segments",
     "timing-tower",
     "session-result",
+    "track-map",
     "race-result",
     "qualifying-result",
 ]
@@ -47,11 +49,18 @@ async def race_chart(
     chart: RaceChart,
     db: DbSession,
     session_code: Annotated[str, Query()] = "race",
+    at: Annotated[datetime | None, Query()] = None,
 ) -> VisualizationResponse:
     try:
         if chart in {"race-result", "qualifying-result"}:
             return await race_classification(db, race_key, chart)
-        return await race_visualization(db, race_key, session_code, chart)
+        return await race_visualization(
+            db,
+            race_key,
+            session_code,
+            chart,
+            at=at,
+        )
     except VisualizationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

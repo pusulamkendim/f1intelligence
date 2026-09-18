@@ -12,6 +12,7 @@ from app.ingestion.jolpica import (
     JolpicaQualifyingResult,
     JolpicaRace,
     JolpicaRaceResult,
+    JolpicaSprintResult,
 )
 from app.ingestion.jolpica_hashes import constructor_standings_hash, driver_standings_hash
 
@@ -481,3 +482,99 @@ async def record_sync_run(
             "metadata": __import__("json").dumps(metadata or {}),
         },
     )
+
+
+
+async def upsert_sprint_results(
+    session: AsyncSession,
+    season: int,
+    round_number: int,
+    rows: list[JolpicaSprintResult],
+    source_url: str,
+) -> int:
+    race_id = await _race_id(session, season, round_number)
+    driver_entities = await _resolve_entity_ids(
+        session,
+        entity_type="driver",
+        provider_ids={row.driver_id for row in rows},
+        season=season,
+    )
+    team_entities = await _resolve_entity_ids(
+        session,
+        entity_type="constructor",
+        provider_ids={
+            row.constructor_id
+            for row in rows
+            if row.constructor_id is not None
+        },
+        season=season,
+    )
+    fetched_at = datetime.now(UTC)
+    for row in rows:
+        provider_result_id = f"{season}:{round_number}:{row.driver_id}"
+        await session.execute(
+            text(
+                """
+                INSERT INTO sprint_results (
+                    race_id, provider, provider_result_id, driver_provider_id,
+                    constructor_provider_id, driver_entity_id, team_entity_id,
+                    car_number, grid_position, finish_position, position_text,
+                    points, laps, status, finish_time, fastest_lap_rank,
+                    fastest_lap_number, fastest_lap_time, source_url, fetched_at
+                ) VALUES (
+                    :race_id, :provider, :provider_result_id, :driver_id,
+                    :constructor_id, :driver_entity_id, :team_entity_id,
+                    :car_number, :grid_position, :finish_position, :position_text,
+                    :points, :laps, :status, :finish_time, :fastest_lap_rank,
+                    :fastest_lap_number, :fastest_lap_time, :source_url,
+                    :fetched_at
+                )
+                ON CONFLICT (provider, provider_result_id) DO UPDATE SET
+                    race_id = EXCLUDED.race_id,
+                    driver_provider_id = EXCLUDED.driver_provider_id,
+                    constructor_provider_id = EXCLUDED.constructor_provider_id,
+                    driver_entity_id = EXCLUDED.driver_entity_id,
+                    team_entity_id = EXCLUDED.team_entity_id,
+                    car_number = EXCLUDED.car_number,
+                    grid_position = EXCLUDED.grid_position,
+                    finish_position = EXCLUDED.finish_position,
+                    position_text = EXCLUDED.position_text,
+                    points = EXCLUDED.points,
+                    laps = EXCLUDED.laps,
+                    status = EXCLUDED.status,
+                    finish_time = EXCLUDED.finish_time,
+                    fastest_lap_rank = EXCLUDED.fastest_lap_rank,
+                    fastest_lap_number = EXCLUDED.fastest_lap_number,
+                    fastest_lap_time = EXCLUDED.fastest_lap_time,
+                    source_url = EXCLUDED.source_url,
+                    fetched_at = EXCLUDED.fetched_at
+                """
+            ),
+            {
+                "race_id": race_id,
+                "provider": PROVIDER,
+                "provider_result_id": provider_result_id,
+                "driver_id": row.driver_id,
+                "constructor_id": row.constructor_id,
+                "driver_entity_id": driver_entities[row.driver_id],
+                "team_entity_id": (
+                    team_entities[row.constructor_id]
+                    if row.constructor_id is not None
+                    else None
+                ),
+                "car_number": row.car_number,
+                "grid_position": row.grid_position,
+                "finish_position": row.position,
+                "position_text": row.position_text,
+                "points": row.points,
+                "laps": row.laps,
+                "status": row.status,
+                "finish_time": row.finish_time,
+                "fastest_lap_rank": row.fastest_lap_rank,
+                "fastest_lap_number": row.fastest_lap_number,
+                "fastest_lap_time": row.fastest_lap_time,
+                "source_url": source_url,
+                "fetched_at": fetched_at,
+            },
+        )
+    return len(rows)

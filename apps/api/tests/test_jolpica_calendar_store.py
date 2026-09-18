@@ -15,6 +15,7 @@ def _race(*, round_number: int, name: str = "Bahrain Grand Prix in Malaysia") ->
         name=name,
         race_date=date(2026, 10, 4),
         start_at=None,
+        sprint_start_at=None,
         source_url="https://example.test/race",
         circuit=JolpicaCircuit(
             provider_id="sepang",

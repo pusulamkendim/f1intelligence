@@ -8,6 +8,7 @@ from app.ingestion.jolpica import (
     parse_calendar,
     parse_constructor_standings,
     parse_driver_standings,
+    parse_sprint_results,
 )
 
 
@@ -47,6 +48,7 @@ def test_parse_calendar_preserves_provider_and_provenance() -> None:
     assert race.circuit.latitude == Decimal("-37.8497")
     assert race.start_at is not None
     assert race.start_at.isoformat() == "2026-03-08T04:00:00+00:00"
+    assert race.sprint_start_at is None
     assert race.source_url == "https://example.test/race"
 
 
@@ -159,3 +161,77 @@ async def test_client_retries_transient_server_error() -> None:
         assert await client.constructor_standings(2026, 3) == []
 
     assert attempts == 2
+
+
+
+def test_parse_calendar_preserves_sprint_start_time() -> None:
+    payload = {
+        "MRData": {
+            "RaceTable": {
+                "Races": [
+                    {
+                        "season": "2026",
+                        "round": "2",
+                        "raceName": "Chinese Grand Prix",
+                        "date": "2026-03-15",
+                        "time": "07:00:00Z",
+                        "Sprint": {
+                            "date": "2026-03-14",
+                            "time": "03:00:00Z",
+                        },
+                        "Circuit": {
+                            "circuitId": "shanghai",
+                            "circuitName": "Shanghai International Circuit",
+                            "Location": {},
+                        },
+                    }
+                ]
+            }
+        }
+    }
+
+    race = parse_calendar(payload)[0]
+    assert race.sprint_start_at is not None
+    assert race.sprint_start_at.isoformat() == "2026-03-14T03:00:00+00:00"
+
+
+def test_parse_sprint_results_preserves_points_and_status() -> None:
+    payload = {
+        "MRData": {
+            "RaceTable": {
+                "Races": [
+                    {
+                        "SprintResults": [
+                            {
+                                "number": "4",
+                                "position": "1",
+                                "positionText": "1",
+                                "points": "8",
+                                "grid": "2",
+                                "laps": "19",
+                                "status": "Finished",
+                                "Driver": {"driverId": "norris"},
+                                "Constructor": {
+                                    "constructorId": "mclaren"
+                                },
+                                "Time": {"time": "31:42.100"},
+                                "FastestLap": {
+                                    "rank": "2",
+                                    "lap": "15",
+                                    "Time": {"time": "1:35.100"},
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+    result = parse_sprint_results(payload)[0]
+    assert result.driver_id == "norris"
+    assert result.position == 1
+    assert result.points == Decimal("8")
+    assert result.grid_position == 2
+    assert result.status == "Finished"
+    assert result.fastest_lap_rank == 2

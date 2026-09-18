@@ -45,8 +45,10 @@ async def test_client_uses_round_scoped_result_endpoints() -> None:
         client = JolpicaClient(http_client, base_url="https://jolpica.test/ergast/f1")
         assert await client.race_results(2026, 3) == []
         assert await client.qualifying_results(2026, 3) == []
+        assert await client.sprint_results(2026, 3) == []
 
     assert requested == [
         "https://jolpica.test/ergast/f1/2026/3/results.json",
         "https://jolpica.test/ergast/f1/2026/3/qualifying.json",
+        "https://jolpica.test/ergast/f1/2026/3/sprint.json",
     ]

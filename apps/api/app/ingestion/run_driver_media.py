@@ -152,6 +152,82 @@ CURATED_DRIVER_PORTRAITS: tuple[CuratedDriverPortrait, ...] = (
         preferred_for=("charts", "driver_card", "standings"),
     ),
     CuratedDriverPortrait(
+        person_slug="max-verstappen",
+        source_provider="redbullracing.com",
+        source_page_url="https://www.redbullracing.com/int-en/team",
+        image_url=(
+            "https://www.redbullracing.com/_next/image?"
+            "q=75&url=%2F_next%2Fstatic%2Fmedia%2Fmax-verstappen.ac2a5010.png&w=640"
+        ),
+        portrait_variant="studio_upper_body",
+        caption="Max Verstappen — 2026 Oracle Red Bull Racing team portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="isack-hadjar",
+        source_provider="redbullracing.com",
+        source_page_url="https://www.redbullracing.com/int-en/team",
+        image_url=(
+            "https://www.redbullracing.com/_next/image?"
+            "q=75&url=%2F_next%2Fstatic%2Fmedia%2Fisack-hadjar.a13a3e30.png&w=640"
+        ),
+        portrait_variant="studio_upper_body",
+        caption="Isack Hadjar — 2026 Oracle Red Bull Racing team portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="george-russell",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/george-russell",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "t_16by9North/c_fit%2Cw_3200%2Ch_1800/q_auto/v1740000001/"
+            "trackside-images/2026/F1_Grand_Prix_Of_Japan___Practice/2268554779.webp"
+        ),
+        portrait_variant="contextual_portrait",
+        caption="George Russell — 2026 Formula 1 high-resolution portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="kimi-antonelli",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/kimi-antonelli",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "t_16by9Centre/c_fit%2Cw_3200%2Ch_1800/q_auto/v1740000001/"
+            "trackside-images/2026/F1_Grand_Prix_Of_Japan/2268884816.webp"
+        ),
+        portrait_variant="contextual_portrait",
+        caption="Kimi Antonelli — 2026 Formula 1 high-resolution portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="lewis-hamilton",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/lewis-hamilton",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "t_16by9Centre/c_fit%2Cw_3200%2Ch_1800/q_auto/v1740000001/"
+            "trackside-images/2026/F1_Grand_Prix_Of_Japan___Practice/2268577899.webp"
+        ),
+        portrait_variant="contextual_portrait",
+        caption="Lewis Hamilton — 2026 Formula 1 high-resolution portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="charles-leclerc",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/charles-leclerc",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "t_16by9North/c_fit%2Cw_3200%2Ch_1800/q_auto/v1740000001/"
+            "trackside-images/2026/F1_Grand_Prix_Of_Japan___Practice/2268572376.webp"
+        ),
+        portrait_variant="contextual_portrait",
+        caption="Charles Leclerc — 2026 Formula 1 high-resolution portrait",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
         person_slug="lando-norris",
         source_provider="mclaren.com",
         source_page_url="https://www.mclaren.com/racing/team/lando-norris/",

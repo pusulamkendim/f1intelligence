@@ -133,7 +133,6 @@ async def _persist_portrait(
         MediaAssetInput(
             source_provider="openf1_headshot",
             discovered_via="openf1_headshot",
-            source_asset_id=f"{season}:{row.person_slug}",
             original_url=row.headshot_url,
             discovery_page_url=source_url,
             caption=f"{row.display_name} — {season} Formula 1 driver portrait",
@@ -142,6 +141,7 @@ async def _persist_portrait(
             season=season,
             metadata={
                 "media_kind": "canonical_driver_portrait",
+                "canonical_key": f"{season}:{row.person_slug}",
                 "person_slug": row.person_slug,
                 "driver_name": row.display_name,
                 "team_name": row.team_name,
@@ -174,7 +174,6 @@ async def _persist_group_photo(
         MediaAssetInput(
             source_provider="formula1.com",
             discovered_via="formula1.com",
-            source_asset_id=seed.source_asset_id,
             original_url=seed.image_url,
             discovery_page_url=seed.page_url,
             caption=seed.caption,
@@ -183,6 +182,7 @@ async def _persist_group_photo(
             season=season,
             metadata={
                 "media_kind": "grid_group",
+                "seed_id": seed.source_asset_id,
                 "group_scope": f"{season}_formula_1_grid",
                 "season": season,
                 "driver_count": len(driver_entity_ids),

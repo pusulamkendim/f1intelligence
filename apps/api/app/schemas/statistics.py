@@ -32,7 +32,7 @@ class DriverCareerStatisticsResponse(BaseModel):
     sprint_entries: int
     sprint_starts: int
     sprint_wins: int
-    sprint_podiums: int
+    sprint_top3s: int
     average_grid: float | None
     average_finish: float | None
     average_classification_position: float | None

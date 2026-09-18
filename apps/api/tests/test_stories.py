@@ -89,6 +89,7 @@ def test_get_story_returns_story_entities_sources_and_evidence() -> None:
     entity_id = uuid4()
     source_item_id = uuid4()
     evidence_id = uuid4()
+    media_asset_id = uuid4()
     fake_session = FakeSession(
         [
             [
@@ -154,6 +155,24 @@ def test_get_story_returns_story_entities_sources_and_evidence() -> None:
                     "raw_metadata": {"presentation_type": "documented_change"},
                 }
             ],
+            [
+                {
+                    "media_asset_id": media_asset_id,
+                    "story_role": "hero",
+                    "content_role": "driver_action",
+                    "url": "https://example.com/media/race.jpg",
+                    "caption": "Driver on track",
+                    "source_provider": "example.com",
+                    "origin_provider": None,
+                    "photographer": "Example Photographer",
+                    "agency": None,
+                    "rights_status": "unknown",
+                    "storage_policy": "metadata_only",
+                    "match_reason": "source_article",
+                    "confidence": 90,
+                    "selected": False,
+                }
+            ],
         ]
     )
 
@@ -178,6 +197,10 @@ def test_get_story_returns_story_entities_sources_and_evidence() -> None:
         payload["evidence"][0]["normalized_claim"]
         == "A synthetic technical change was recorded."
     )
+    assert payload["media"][0]["media_asset_id"] == str(media_asset_id)
+    assert payload["media"][0]["url"] == "https://example.com/media/race.jpg"
+    assert payload["media"][0]["story_role"] == "hero"
+    assert payload["media"][0]["selected"] is False
 
 
 def test_get_story_returns_404() -> None:

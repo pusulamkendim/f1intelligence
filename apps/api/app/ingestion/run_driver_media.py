@@ -94,7 +94,7 @@ async def load_grid_driver_portraits(
                 WHERE se.driver_entity_id = p.entity_id
                   AND r.season = :season
                   AND NULLIF(se.headshot_reference_url, '') IS NOT NULL
-                ORDER BY rs.starts_at DESC NULLS LAST, se.created_at DESC
+                ORDER BY rs.starts_at DESC NULLS LAST, se.fetched_at DESC
                 LIMIT 1
             ) portrait ON true
             WHERE tpr.role = 'driver'

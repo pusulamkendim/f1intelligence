@@ -103,6 +103,84 @@ CREATE TABLE IF NOT EXISTS media_assets (
     )
 );
 
+-- Upgrade the legacy media_assets table created by 001_init.sql.
+-- CREATE TABLE IF NOT EXISTS does not add missing columns to an existing table,
+-- so every field introduced by the rights-aware registry must be replay-safe.
+ALTER TABLE media_assets
+    ADD COLUMN IF NOT EXISTS content_role text NOT NULL DEFAULT 'article_hero',
+    ADD COLUMN IF NOT EXISTS source_role text NOT NULL DEFAULT 'discovery',
+    ADD COLUMN IF NOT EXISTS source_asset_id text,
+    ADD COLUMN IF NOT EXISTS origin_provider text,
+    ADD COLUMN IF NOT EXISTS origin_asset_id text,
+    ADD COLUMN IF NOT EXISTS discovered_via text,
+    ADD COLUMN IF NOT EXISTS discovery_page_url text,
+    ADD COLUMN IF NOT EXISTS original_url text,
+    ADD COLUMN IF NOT EXISTS caption text,
+    ADD COLUMN IF NOT EXISTS photographer text,
+    ADD COLUMN IF NOT EXISTS agency text,
+    ADD COLUMN IF NOT EXISTS copyright_holder text,
+    ADD COLUMN IF NOT EXISTS credit_line text,
+    ADD COLUMN IF NOT EXISTS license_type text,
+    ADD COLUMN IF NOT EXISTS license_url text,
+    ADD COLUMN IF NOT EXISTS usage_scope text NOT NULL DEFAULT 'unknown',
+    ADD COLUMN IF NOT EXISTS storage_policy text NOT NULL DEFAULT 'metadata_only',
+    ADD COLUMN IF NOT EXISTS modification_allowed boolean,
+    ADD COLUMN IF NOT EXISTS rights_evidence_url text,
+    ADD COLUMN IF NOT EXISTS rights_verified_at timestamptz,
+    ADD COLUMN IF NOT EXISTS season integer,
+    ADD COLUMN IF NOT EXISTS race_id uuid REFERENCES races(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS session_id uuid REFERENCES race_sessions(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS lap_number integer,
+    ADD COLUMN IF NOT EXISTS captured_at timestamptz,
+    ADD COLUMN IF NOT EXISTS published_at timestamptz,
+    ADD COLUMN IF NOT EXISTS aspect_ratio numeric(8,5),
+    ADD COLUMN IF NOT EXISTS content_hash text,
+    ADD COLUMN IF NOT EXISTS r2_bucket text,
+    ADD COLUMN IF NOT EXISTS r2_key text,
+    ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+UPDATE media_assets
+SET
+    discovered_via = COALESCE(discovered_via, source_provider),
+    discovery_page_url = COALESCE(discovery_page_url, source_page_url),
+    original_url = COALESCE(
+        original_url,
+        original_file_url,
+        source_page_url
+    ),
+    caption = COALESCE(caption, title, description),
+    photographer = COALESCE(photographer, creator_name),
+    copyright_holder = COALESCE(copyright_holder, rights_holder),
+    credit_line = COALESCE(credit_line, attribution_text),
+    license_type = COALESCE(license_type, licence_name),
+    license_url = COALESCE(license_url, licence_url),
+    rights_evidence_url = COALESCE(
+        rights_evidence_url,
+        permission_reference,
+        attribution_url
+    ),
+    rights_verified_at = COALESCE(rights_verified_at, rights_checked_at),
+    content_hash = COALESCE(content_hash, checksum)
+WHERE
+    discovered_via IS NULL
+    OR discovery_page_url IS NULL
+    OR original_url IS NULL
+    OR caption IS NULL
+    OR photographer IS NULL
+    OR copyright_holder IS NULL
+    OR credit_line IS NULL
+    OR license_type IS NULL
+    OR license_url IS NULL
+    OR rights_evidence_url IS NULL
+    OR rights_verified_at IS NULL
+    OR content_hash IS NULL;
+
+ALTER TABLE media_assets
+    ALTER COLUMN discovered_via SET NOT NULL,
+    ALTER COLUMN original_url SET NOT NULL,
+    ALTER COLUMN source_page_url DROP NOT NULL,
+    ALTER COLUMN rights_checked_at DROP NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS media_assets_provider_url_uq
     ON media_assets(source_provider, original_url);
 

@@ -81,6 +81,9 @@ def _coordinate(row: Any) -> TimelineCoordinate:
         session_id=str(row["session_id"]) if row.get("session_id") else None,
         session_code=row.get("session_code"),
         session_label=row.get("session_label"),
+        segment_id=str(row["segment_id"]) if row.get("segment_id") else None,
+        segment_code=row.get("segment_code"),
+        segment_label=row.get("segment_label"),
         driver_id=str(row["driver_id"]) if row.get("driver_id") else None,
         driver_key=row.get("driver_key"),
         driver_label=row.get("driver_label"),
@@ -161,6 +164,9 @@ def _placement_sql(
             p.session_id,
             rs.session_code,
             rs.session_name AS session_label,
+            p.segment_id,
+            seg.segment_code,
+            seg.segment_name AS segment_label,
             p.driver_entity_id AS driver_id,
             de.slug AS driver_key,
             de.display_name AS driver_label,
@@ -184,6 +190,7 @@ def _placement_sql(
           ON p.item_type = 'story' AND s.id = p.item_id
         LEFT JOIN races r ON r.id = p.race_id
         LEFT JOIN race_sessions rs ON rs.id = p.session_id
+        LEFT JOIN session_segments seg ON seg.id = p.segment_id
         LEFT JOIN entities de ON de.id = p.driver_entity_id
         LEFT JOIN LATERAL (
             SELECT si.provider, si.source_url, si.fetched_at

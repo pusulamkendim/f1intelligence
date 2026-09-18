@@ -175,3 +175,23 @@ async def test_timeline_metadata_uses_single_typed_json_bind(
     assert metadata["session_code"] is None
     assert metadata["race_key"] is None
     assert metadata["driver_key"] is None
+
+
+
+def test_calendar_sprint_count_is_not_a_sprint_session_cue() -> None:
+    placement = infer_story_coordinate(
+        text_value=(
+            "2027 Formula 1 race calendar confirmed "
+            "with 10 Sprint events revealed"
+        ),
+        taxonomy="sporting",
+        reported_at=datetime(2026, 9, 18, tzinfo=UTC),
+        race_season=None,
+        race_anchor_at=None,
+    )
+
+    assert placement.session_code is None
+    assert placement.season == 2027
+    assert placement.precision == "season"
+    assert placement.temporal_relation == "scheduled_for"
+    assert placement.reason == "explicit_season_reference"

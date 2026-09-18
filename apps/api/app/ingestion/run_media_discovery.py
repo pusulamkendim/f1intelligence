@@ -61,12 +61,12 @@ def _normalize_media_context(value: str | None) -> str | None:
     if not value:
         return value
     normalized = re.sub(
-        r"\\b(?:Formula\\s*1|F1)\\s+GP\\b",
+        r"\b(?:Formula\s*1|F1)\s+GP\b",
         "Grand Prix",
         value,
         flags=re.IGNORECASE,
     )
-    return re.sub(r"\\bGP\\b", "Grand Prix", normalized, flags=re.IGNORECASE)
+    return re.sub(r"\bGP\b", "Grand Prix", normalized, flags=re.IGNORECASE)
 
 
 async def _race_id_from_classifications(session, classifications):

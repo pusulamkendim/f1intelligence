@@ -245,7 +245,9 @@ def _annotation_token(row: Any) -> str | None:
     message = (row.get("label") or "").upper()
     combined = f"{category} {message}"
 
-    if "RED" in flag:
+    if "CHEQUERED" in flag or "CHECKERED" in flag:
+        return "flag-chequered"
+    if flag == "RED":
         return "flag-red"
     if "YELLOW" in flag:
         return "flag-yellow"
@@ -253,8 +255,6 @@ def _annotation_token(row: Any) -> str | None:
         return "flag-green"
     if "BLUE" in flag:
         return "flag-blue"
-    if "CHEQUERED" in flag or "CHECKERED" in flag:
-        return "flag-chequered"
     if "VIRTUAL SAFETY CAR" in combined or "VSC" in combined:
         return "virtual-safety-car"
     if "SAFETY CAR" in combined:

@@ -1119,9 +1119,12 @@ async def race_visualization(
     race_key: str,
     session_code: str,
     chart: Chart,
+    *,
+    at: datetime | None = None,
 ) -> VisualizationResponse:
     context = await _session(session, race_key, session_code)
     session_id = context["id"]
+    metadata: dict[str, Any] = {}
 
     if chart == "positions":
         series = position_series(await _position_rows(session, session_id))
@@ -1310,6 +1313,20 @@ async def race_visualization(
             "timing-tower",
             show_legend=False,
         )
+    elif chart == "track-map":
+        series, metadata = await _track_map_series(
+            session,
+            session_id,
+            at=at,
+        )
+        chart_type = "spatial_map"
+        x_axis = _axis("x", "Track X", unit="coordinate", formatter="integer")
+        y_axis = _axis("y", "Track Y", unit="coordinate", formatter="integer")
+        presentation = _presentation(
+            "driver-tracker",
+            show_legend=True,
+            show_annotations=False,
+        )
     else:
         series = await _session_result_series(session, session_id)
         chart_type = "timing_table"
@@ -1340,6 +1357,7 @@ async def race_visualization(
         presentation=presentation,
         series=series,
         annotations=annotations,
+        metadata=metadata,
         provenance=await _dataset_provenance(
             session,
             session_id,

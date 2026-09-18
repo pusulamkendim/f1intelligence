@@ -114,7 +114,7 @@ class _GalleryParser(HTMLParser):
                 absolute = urljoin(self.gallery_url, href)
                 if _is_gallery_asset(absolute):
                     self._figure_href = absolute
-        elif lower == "img" and self._in_figure:
+        elif lower == "img":
             src = (
                 values.get("data-full-url")
                 or values.get("data-src")
@@ -126,8 +126,13 @@ class _GalleryParser(HTMLParser):
             absolute = urljoin(self.gallery_url, src)
             if not _is_gallery_asset(absolute):
                 return
-            self._figure_src = absolute
-            self._figure_alt = values.get("alt")
+            alt = values.get("alt")
+            if self._in_figure:
+                self._figure_src = absolute
+                self._figure_alt = alt
+            elif "wp-content/uploads" in absolute and absolute not in self._seen:
+                self._seen.add(absolute)
+                self.items.append((absolute, alt, alt))
 
     def handle_data(self, data: str) -> None:
         if self._capture_h1:

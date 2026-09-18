@@ -38,6 +38,9 @@ class MediaDiscoveryStats:
     galleries_fetched: int = 0
     assets_seen: int = 0
     assets_persisted: int = 0
+    assets_with_race: int = 0
+    assets_with_entities: int = 0
+    generic_assets: int = 0
     entity_links: int = 0
     story_candidates: int = 0
     failures: int = 0
@@ -53,6 +56,19 @@ def _season_from_text(*values: str | None) -> int | None:
     return None
 
 
+def _normalize_media_context(value: str | None) -> str | None:
+    """Expand common gallery shorthand so canonical race aliases can match."""
+    if not value:
+        return value
+    normalized = re.sub(
+        r"\\b(?:Formula\\s*1|F1)\\s+GP\\b",
+        "Grand Prix",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\\bGP\\b", "Grand Prix", normalized, flags=re.IGNORECASE)
+
+
 async def _race_id_from_classifications(session, classifications):
     for item in classifications:
         if item.entity_type != "race":
@@ -62,7 +78,7 @@ async def _race_id_from_classifications(session, classifications):
                 """
                 SELECT id
                 FROM races
-                WHERE canonical_entity_id = :entity_id
+                WHERE entity_id = :entity_id
                 LIMIT 1
                 """
             ),
@@ -152,11 +168,15 @@ async def ingest_f1_fansite(
                             item.gallery_title,
                             item.caption,
                         )
+                        normalized_gallery_title = _normalize_media_context(
+                            item.gallery_title
+                        )
+                        normalized_caption = _normalize_media_context(item.caption)
                         classification_text = SourceItemText(
-                            title=item.gallery_title
-                            or item.caption
+                            title=normalized_gallery_title
+                            or normalized_caption
                             or "Formula 1 media",
-                            standfirst=item.caption,
+                            standfirst=normalized_caption,
                             season=season,
                             race_season=season,
                         )
@@ -168,6 +188,13 @@ async def ingest_f1_fansite(
                             session,
                             classifications,
                         )
+                        if race_id is not None:
+                            stats.assets_with_race += 1
+                        if classifications:
+                            stats.assets_with_entities += 1
+                        if item.content_role == "generic":
+                            stats.generic_assets += 1
+
                         asset_id = await upsert_media_asset(
                             session,
                             MediaAssetInput(
@@ -189,6 +216,7 @@ async def ingest_f1_fansite(
                                 ),
                                 metadata={
                                     "gallery_title": item.gallery_title,
+                                    "normalized_gallery_title": normalized_gallery_title,
                                     "rights_note": item.rights_note,
                                     "discovery_mode": "wallpaper_gallery",
                                 },

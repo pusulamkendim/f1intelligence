@@ -29,6 +29,9 @@ RaceChart = Literal[
     "weather",
     "overtakes",
     "starting-grid",
+    "segments",
+    "timing-tower",
+    "session-result",
     "race-result",
     "qualifying-result",
 ]

@@ -22,6 +22,7 @@ EVENT_ROLES = {
     "pit_stop",
     "celebration",
 }
+RACE_ONLY_STORY_ROLES = EVENT_ROLES | {"race_hero"}
 
 ROLE_KEYWORDS = {
     "podium": ("podium", "trophy", "champagne"),
@@ -498,13 +499,44 @@ def _role_matches_title(role: str, title: str) -> bool:
     return any(keyword in normalized for keyword in keywords)
 
 
+def _story_match_is_strong_enough(
+    *,
+    role: str,
+    shared_entities: int,
+    shared_races: int,
+) -> bool:
+    if shared_entities >= 2:
+        return True
+    return shared_races > 0 and role in RACE_ONLY_STORY_ROLES
+
+
 async def match_media_asset_to_stories(
     session: AsyncSession,
     media_asset_id: UUID,
 ) -> int:
-    result = await session.execute(
+    await session.execute(
         text(
             """
+            DELETE FROM story_media_candidates
+            WHERE media_asset_id = :media_asset_id
+              AND manual_override = false
+              AND match_reason IN (
+                  'exact_event',
+                  'race_match',
+                  'entity_match',
+                  'fallback'
+              )
+            """
+        ),
+        {"media_asset_id": media_asset_id},
+    )
+
+    race_only_roles_sql = ", ".join(
+        f"'{role}'" for role in sorted(RACE_ONLY_STORY_ROLES)
+    )
+    result = await session.execute(
+        text(
+            f"""
             SELECT
                 s.id AS story_id,
                 s.title,
@@ -527,8 +559,11 @@ async def match_media_asset_to_stories(
               AND s.merged_into_story_id IS NULL
             GROUP BY s.id, s.title, ma.content_role
             HAVING
-                COUNT(*) FILTER (WHERE e.entity_type = 'race') > 0
-                OR COUNT(*) >= 2
+                COUNT(*) >= 2
+                OR (
+                    COUNT(*) FILTER (WHERE e.entity_type = 'race') > 0
+                    AND ma.content_role IN ({race_only_roles_sql})
+                )
             ORDER BY
                 COUNT(*) FILTER (WHERE e.entity_type = 'race') DESC,
                 COUNT(*) DESC,
@@ -546,6 +581,13 @@ async def match_media_asset_to_stories(
         person_match = int(row["shared_people"]) > 0
         team_match = int(row["shared_teams"]) > 0
         role = str(row["content_role"])
+        if not _story_match_is_strong_enough(
+            role=role,
+            shared_entities=shared,
+            shared_races=int(row["shared_races"]),
+        ):
+            continue
+
         score = 45 + min(shared, 3) * 10
         if race_match:
             score += 20
@@ -565,7 +607,7 @@ async def match_media_asset_to_stories(
         else:
             reason = "fallback"
 
-        story_role = "hero" if role in EVENT_ROLES | {"race_hero"} else "supporting"
+        story_role = "hero" if role in RACE_ONLY_STORY_ROLES else "supporting"
         await link_story_media_candidate(
             session,
             story_id=row["story_id"],

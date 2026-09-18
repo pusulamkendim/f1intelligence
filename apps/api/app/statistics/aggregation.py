@@ -224,6 +224,11 @@ def aggregate_driver_statistics(
 
     pole_rounds = {
         (row.season, row.round)
+        for row in started_rows
+        if row.grid_position == 1
+    }
+    qualifying_p1_rounds = {
+        (row.season, row.round)
         for row in qualifying_rows
         if row.position == 1
     }
@@ -252,7 +257,7 @@ def aggregate_driver_statistics(
         wins=wins,
         podiums=podiums,
         poles=len(pole_rounds),
-        qualifying_p1s=len(pole_rounds),
+        qualifying_p1s=len(qualifying_p1_rounds),
         fastest_laps=fastest_laps,
         points=points,
         race_points=race_points,

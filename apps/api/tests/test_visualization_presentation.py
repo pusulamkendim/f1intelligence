@@ -104,3 +104,72 @@ async def test_sector_chart_uses_sector_dispatch_not_stint_fallback(monkeypatch)
     assert response.chart_type == "timing_table"
     assert response.presentation.preset == "sector-timing"
     assert response.series[0].points[0]["s1_status"] == "purple"
+
+
+
+@pytest.mark.asyncio
+async def test_track_map_uses_spatial_contract(monkeypatch):
+    async def fake_session(db, race_key, session_code):
+        return {
+            "id": "session-id",
+            "session_name": "Race",
+            "source_url": "https://example.test/session",
+            "fetched_at": None,
+            "official_name": "Example Grand Prix",
+        }
+
+    async def fake_track_map(db, session_id, at):
+        return (
+            [
+                {
+                    "key": "max-verstappen",
+                    "label": "Max Verstappen",
+                    "unit": "coordinate",
+                    "driver_number": 1,
+                    "driver_acronym": "VER",
+                    "classification_position": 1,
+                    "team_key": "red-bull-racing",
+                    "team_label": "Red Bull Racing",
+                    "color": "#3671C6",
+                    "points": [
+                        {
+                            "timestamp": "2026-09-18T12:00:00+00:00",
+                            "x": 100,
+                            "y": 200,
+                            "z": 10,
+                            "position": 1,
+                            "lap": 20,
+                            "gap": "LEADER",
+                            "gap_seconds": None,
+                            "interval": None,
+                            "interval_seconds": None,
+                        }
+                    ],
+                }
+            ],
+            {
+                "coordinate_system": "openf1_cartesian",
+                "frame_at": "2026-09-18T12:00:00+00:00",
+                "reference_path": [{"x": 0, "y": 0, "z": 0}],
+            },
+        )
+
+    async def fake_provenance(db, session_id, tables):
+        assert "session_locations" in tables
+        return []
+
+    monkeypatch.setattr(service, "_session", fake_session)
+    monkeypatch.setattr(service, "_track_map_series", fake_track_map)
+    monkeypatch.setattr(service, "_dataset_provenance", fake_provenance)
+
+    response = await service.race_visualization(
+        None,
+        "example-grand-prix",
+        "race",
+        "track-map",
+    )
+
+    assert response.chart_type == "spatial_map"
+    assert response.presentation.preset == "driver-tracker"
+    assert response.metadata["coordinate_system"] == "openf1_cartesian"
+    assert response.series[0].points[0]["position"] == 1

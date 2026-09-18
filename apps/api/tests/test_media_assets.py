@@ -59,3 +59,12 @@ def test_multi_entity_media_can_match_without_event_role() -> None:
         shared_entities=2,
         shared_races=1,
     )
+
+
+
+def test_official_team_media_sources_are_metadata_only_until_rights_verified() -> None:
+    for provider in ("williamsf1.com", "media.alpinecars.com"):
+        policy = policy_for_provider(provider)
+        assert policy.source_role == "discovery"
+        assert policy.storage_policy == "metadata_only"
+        assert policy.rights_status == "restricted"

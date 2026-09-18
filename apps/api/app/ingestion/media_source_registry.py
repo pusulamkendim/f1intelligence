@@ -65,6 +65,15 @@ MEDIA_SOURCE_POLICIES: dict[str, MediaSourcePolicy] = {
         rights_evidence_url="https://media.alpinecars.com/?lang=eng",
         notes="First-party media-centre discovery source; verify asset-specific terms before reuse.",
     ),
+    "mclaren.com": MediaSourcePolicy(
+        key="mclaren.com",
+        source_role="discovery",
+        rights_status="restricted",
+        storage_policy="metadata_only",
+        usage_scope="unknown",
+        rights_evidence_url="https://www.mclaren.com/racing/terms-and-conditions/",
+        notes="Official McLaren team portrait discovery source; publication rights remain restricted.",
+    ),
     "openf1_headshot": MediaSourcePolicy(
         key="openf1_headshot",
         source_role="discovery",

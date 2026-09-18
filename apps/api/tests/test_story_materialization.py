@@ -264,3 +264,26 @@ def test_event_fingerprint_convergence_merges_split_roots() -> None:
     assert merges == 1
     assert merged_pairs == [(left, right)]
     assert refreshed == [left, left]
+
+
+
+def test_rules_itself_out_is_not_regulation_taxonomy() -> None:
+    decision = classify_story_worthiness(
+        source_class="independent_editorial",
+        title="Melbourne rules itself out of 2027 F1 opener contention",
+        classifications=(),
+    )
+
+    assert decision.story_worthy is True
+    assert decision.taxonomy != "regulation"
+
+
+def test_explicit_new_rules_remain_regulation_taxonomy() -> None:
+    decision = classify_story_worthiness(
+        source_class="independent_editorial",
+        title="FIA confirms new rules for the 2027 Formula 1 season",
+        classifications=(),
+    )
+
+    assert decision.story_worthy is True
+    assert decision.taxonomy == "regulation"

@@ -106,10 +106,21 @@ def _taxonomy(title: str) -> str:
     value = _normalize(title)
     if any(token in value for token in ("academy", "junior team", "rookie test")):
         return "academy_feeder"
-    if any(
-        token in value
-        for token in ("rule", "regulation", "vsc", "penalty", "directive")
-    ):
+
+    regulation_phrases = (
+        "regulation",
+        "regulations",
+        "technical directive",
+        "sporting directive",
+        "penalty",
+        "virtual safety car",
+        "vsc",
+        "rule change",
+        "rules change",
+        "new rule",
+        "new rules",
+    )
+    if any(phrase in value for phrase in regulation_phrases):
         return "regulation"
     if any(
         token in value

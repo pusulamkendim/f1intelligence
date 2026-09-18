@@ -309,8 +309,9 @@ async def refresh_cluster_candidates(
                 FROM source_items
                 WHERE id <> :source_item_id
                   AND provider <> :provider
-                  AND :event_fingerprint IS NOT NULL
-                  AND raw_metadata->>'event_fingerprint' = :event_fingerprint
+                  AND CAST(:event_fingerprint AS text) IS NOT NULL
+                  AND raw_metadata->>'event_fingerprint'
+                      = CAST(:event_fingerprint AS text)
                 UNION
                 SELECT id
                 FROM source_items

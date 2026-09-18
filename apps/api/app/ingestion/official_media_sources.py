@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 from app.ingestion.media_assets import infer_content_role
 
@@ -28,6 +28,16 @@ _CHALLENGE_MARKERS = (
     "verify you are human",
     "checking your browser",
     "cloudflare challenge",
+)
+_EVENT_RE = re.compile(
+    r"\b(20\d{2})\s+(?:(?:Formula\s*One|Formula\s*1|F1)\s+)?"
+    r"([A-Za-z][A-Za-z .'-]{2,40}?)\s+Grand\s+Prix\b",
+    re.IGNORECASE,
+)
+_YEAR_RE = re.compile(r"\b(20\d{2})\b")
+_ALPINE_VARIANT_RE = re.compile(
+    r"^([a-f0-9]{32})-([tml])\.jpg(?:\.webp)?$",
+    re.IGNORECASE,
 )
 
 
@@ -55,6 +65,7 @@ class OfficialMediaItem:
     origin_provider: str | None = None
     origin_asset_id: str | None = None
     rights_note: str | None = None
+    season: int | None = None
 
 
 OFFICIAL_MEDIA_SOURCES: tuple[OfficialMediaSource, ...] = (

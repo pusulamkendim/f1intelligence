@@ -19,6 +19,9 @@ RenderPreset = Literal[
     "driver-season-results",
     "race-classification",
     "qualifying-classification",
+    "mini-sector-timing",
+    "timing-tower",
+    "session-classification",
 ]
 
 

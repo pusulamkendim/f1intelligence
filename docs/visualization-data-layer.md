@@ -62,3 +62,11 @@ Driver season results:
 Existing canonical/OpenF1 tables remain the source of truth. The visualization layer stores no duplicate telemetry and does not persist rendered charts.
 
 Raw payloads, ingestion audit rows, aliases, documents and source/story metadata are provenance/content infrastructure and are intentionally not promoted to user-facing chart families.
+
+## Known source gaps before full live-timing parity
+
+The current database does not ingest OpenF1 `location` samples, so a live driver-tracker / circuit-map view cannot yet be produced from canonical data.
+
+The current database also does not ingest high-frequency OpenF1 `car_data`, so speed/throttle/brake/gear/DRS telemetry traces are intentionally outside this PR.
+
+Circuit artwork/geometry and other visual assets belong to the media layer rather than this visualization-data PR.

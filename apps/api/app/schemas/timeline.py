@@ -10,7 +10,7 @@ TemporalRelation = Literal[
     "effective_from",
     "applies_to",
 ]
-TimelinePrecision = Literal["season", "race", "session", "stint", "lap", "timestamp"]
+TimelinePrecision = Literal["season", "race", "session", "segment", "stint", "lap", "timestamp"]
 
 
 class TimelineCoordinate(BaseModel):
@@ -21,6 +21,9 @@ class TimelineCoordinate(BaseModel):
     session_id: str | None = None
     session_code: str | None = None
     session_label: str | None = None
+    segment_id: str | None = None
+    segment_code: str | None = None
+    segment_label: str | None = None
     driver_id: str | None = None
     driver_key: str | None = None
     driver_label: str | None = None

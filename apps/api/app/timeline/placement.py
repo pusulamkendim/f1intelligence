@@ -32,6 +32,7 @@ _NON_F1_EVENT_TERMS = (
 )
 _LAP_RE = re.compile(r"\b(?:lap|lap number)\s*#?\s*(\d{1,3})\b", re.IGNORECASE)
 _STINT_RE = re.compile(r"\bstint\s*#?\s*(\d{1,2})\b", re.IGNORECASE)
+_QUALIFYING_SEGMENT_RE = re.compile(r"\bq([123])\b", re.IGNORECASE)
 _ORDINAL_STINTS = {
     "first stint": 1,
     "second stint": 2,
@@ -126,6 +127,7 @@ class PlacementInference:
     temporal_relation: str
     precision: str
     session_code: str | None
+    segment_code: str | None
     lap_number: int | None
     stint_number: int | None
     confidence: int
@@ -199,6 +201,11 @@ def infer_session_code(value: str) -> str | None:
     return None
 
 
+def infer_qualifying_segment(value: str) -> str | None:
+    match = _QUALIFYING_SEGMENT_RE.search(value)
+    return f"q{match.group(1)}" if match else None
+
+
 def infer_lap_number(value: str) -> int | None:
     match = _LAP_RE.search(value)
     if not match:
@@ -231,6 +238,9 @@ def infer_story_coordinate(
         or (reported_at.year if reported_at else datetime.now().year)
     )
     session_code = infer_session_code(text_value)
+    segment_code = infer_qualifying_segment(text_value)
+    if segment_code is not None and session_code is None:
+        session_code = "qualifying"
     lap_number = infer_lap_number(text_value)
     stint_number = infer_stint_number(text_value)
     normalized = _normalized(text_value)
@@ -275,6 +285,10 @@ def infer_story_coordinate(
         precision = "stint"
         confidence = 96
         reason = "explicit_stint_reference"
+    elif segment_code:
+        precision = "segment"
+        confidence = 98
+        reason = "explicit_qualifying_segment_reference"
     elif session_code:
         precision = "session"
         confidence = 96
@@ -297,6 +311,7 @@ def infer_story_coordinate(
         temporal_relation=temporal_relation,
         precision=precision,
         session_code=session_code,
+        segment_code=segment_code,
         lap_number=lap_number,
         stint_number=stint_number,
         confidence=confidence,
@@ -589,6 +604,28 @@ async def _session_for_code(
     return result.mappings().first()
 
 
+async def _segment_for_code(
+    session: AsyncSession,
+    session_id: UUID,
+    segment_code: str | None,
+):
+    if segment_code is None:
+        return None
+    result = await session.execute(
+        text(
+            """
+            SELECT id, segment_code, segment_name, sequence, starts_at, ends_at
+            FROM session_segments
+            WHERE session_id = :session_id
+              AND segment_code = :segment_code
+            LIMIT 1
+            """
+        ),
+        {"session_id": session_id, "segment_code": segment_code},
+    )
+    return result.mappings().first()
+
+
 async def _story_driver_in_session(
     session: AsyncSession,
     story_id: UUID,
@@ -733,6 +770,12 @@ async def refresh_story_timeline_placement(
         else None
     )
     session_id = session_row["id"] if session_row else None
+    segment_row = (
+        await _segment_for_code(session, session_id, inference.segment_code)
+        if session_id is not None
+        else None
+    )
+    segment_id = segment_row["id"] if segment_row else None
     driver = (
         await _story_driver_in_session(session, story_id, session_id)
         if session_id is not None and (inference.lap_number or inference.stint_number)
@@ -744,7 +787,7 @@ async def refresh_story_timeline_placement(
     temporal_relation = inference.temporal_relation
     confidence = inference.confidence
     reason = inference.reason
-    if precision in {"lap", "stint", "session"} and session_row is None:
+    if precision in {"lap", "stint", "segment", "session"} and session_row is None:
         if race_id is not None:
             precision = "race"
         else:
@@ -752,13 +795,17 @@ async def refresh_story_timeline_placement(
             temporal_relation = "reported_at"
             confidence = 80
             reason = "unresolved_session_fallback"
+    if precision == "segment" and segment_row is None:
+        precision = "session" if session_row else ("race" if race_id else "timestamp")
+        confidence = min(confidence, 90)
+        reason = "unresolved_segment_fallback"
     if precision == "stint" and driver_entity_id is None:
         precision = "session" if session_row else ("race" if race_id else "timestamp")
 
     anchor_at = (
-        session_row["starts_at"]
-        if session_row
-        else (
+        (segment_row["starts_at"] if segment_row else None)
+        or (session_row["starts_at"] if session_row else None)
+        or (
             race["anchor_at"]
             if race is not None and race_id is not None
             else None
@@ -789,6 +836,7 @@ async def refresh_story_timeline_placement(
                 season,
                 race_id,
                 session_id,
+                segment_id,
                 driver_entity_id,
                 stint_number,
                 lap_number,
@@ -806,6 +854,7 @@ async def refresh_story_timeline_placement(
                 :season,
                 :race_id,
                 :session_id,
+                :segment_id,
                 :driver_entity_id,
                 :stint_number,
                 :lap_number,
@@ -825,6 +874,7 @@ async def refresh_story_timeline_placement(
             "season": inference.season,
             "race_id": race_id,
             "session_id": session_id,
+            "segment_id": segment_id if precision == "segment" else None,
             "driver_entity_id": driver_entity_id,
             "stint_number": inference.stint_number if precision == "stint" else None,
             "lap_number": inference.lap_number if precision == "lap" else None,
@@ -838,6 +888,11 @@ async def refresh_story_timeline_placement(
                     "session_code": (
                         session_row["session_code"]
                         if session_row
+                        else None
+                    ),
+                    "segment_code": (
+                        segment_row["segment_code"]
+                        if segment_row and precision == "segment"
                         else None
                     ),
                     "race_key": (

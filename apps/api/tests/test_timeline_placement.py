@@ -1,11 +1,17 @@
+import json
 from datetime import UTC, datetime
+from uuid import uuid4
 
+import pytest
+
+import app.timeline.placement as placement_module
 from app.timeline.placement import (
     explicit_season,
     infer_lap_number,
     infer_session_code,
     infer_stint_number,
     infer_story_coordinate,
+    refresh_story_timeline_placement,
 )
 
 
@@ -108,3 +114,64 @@ def test_future_regulation_season_overrides_current_race_context() -> None:
     assert placement.precision == "season"
     assert placement.temporal_relation == "effective_from"
     assert placement.reason == "explicit_future_effective_season"
+
+
+
+class _TimelineCaptureSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict | None]] = []
+
+    async def execute(self, statement, params=None):
+        self.calls.append((str(statement), params))
+        return None
+
+
+@pytest.mark.asyncio
+async def test_timeline_metadata_uses_single_typed_json_bind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    story_id = uuid4()
+    reported_at = datetime(2026, 9, 17, 20, 11, tzinfo=UTC)
+
+    async def fake_story_row(session, requested_story_id):
+        assert requested_story_id == story_id
+        return {
+            "id": story_id,
+            "title": "2027 Formula 1 season preview",
+            "summary": None,
+            "taxonomy": "sporting",
+            "first_published_at": reported_at,
+            "first_observed_at": None,
+            "created_at": reported_at,
+        }
+
+    async def fake_story_race(session, requested_story_id):
+        assert requested_story_id == story_id
+        return None
+
+    monkeypatch.setattr(
+        placement_module,
+        "_story_row",
+        fake_story_row,
+    )
+    monkeypatch.setattr(
+        placement_module,
+        "_story_race",
+        fake_story_race,
+    )
+
+    session = _TimelineCaptureSession()
+    await refresh_story_timeline_placement(
+        session,  # type: ignore[arg-type]
+        story_id,
+    )
+
+    insert_sql, params = session.calls[-1]
+    assert "CAST(:metadata AS jsonb)" in insert_sql
+    assert ":reason" not in insert_sql
+    assert params is not None
+    metadata = json.loads(params["metadata"])
+    assert metadata["reason"] == "explicit_season_reference"
+    assert metadata["session_code"] is None
+    assert metadata["race_key"] is None
+    assert metadata["driver_key"] is None

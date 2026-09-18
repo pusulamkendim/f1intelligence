@@ -9,6 +9,76 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ingestion.openf1 import OpenF1Driver, OpenF1Meeting, OpenF1Session, OpenF1SessionResult
 
 PROVIDER = "openf1"
+QUALIFYING_SEGMENTS = (("q1", "Q1", 1), ("q2", "Q2", 2), ("q3", "Q3", 3))
+
+
+def qualifying_segment_definitions(session_code: str) -> tuple[tuple[str, str, int], ...]:
+    return QUALIFYING_SEGMENTS if session_code == "qualifying" else ()
+
+
+async def _upsert_session_segments(
+    session: AsyncSession,
+    *,
+    session_id: Any,
+    item: OpenF1Session,
+) -> None:
+    for segment_code, segment_name, sequence in qualifying_segment_definitions(
+        item.session_code
+    ):
+        await session.execute(
+            text(
+                """
+                INSERT INTO session_segments (
+                    session_id,
+                    segment_code,
+                    segment_name,
+                    segment_type,
+                    sequence,
+                    provider,
+                    provider_segment_id,
+                    source_url,
+                    fetched_at,
+                    raw_metadata
+                ) VALUES (
+                    :session_id,
+                    :segment_code,
+                    :segment_name,
+                    'qualifying_phase',
+                    :sequence,
+                    :provider,
+                    NULL,
+                    :source_url,
+                    :fetched_at,
+                    CAST(:raw_metadata AS jsonb)
+                )
+                ON CONFLICT (session_id, segment_code) DO UPDATE SET
+                    segment_name = EXCLUDED.segment_name,
+                    segment_type = EXCLUDED.segment_type,
+                    sequence = EXCLUDED.sequence,
+                    provider = EXCLUDED.provider,
+                    source_url = EXCLUDED.source_url,
+                    fetched_at = EXCLUDED.fetched_at,
+                    raw_metadata = EXCLUDED.raw_metadata
+                """
+            ),
+            {
+                "session_id": session_id,
+                "segment_code": segment_code,
+                "segment_name": segment_name,
+                "sequence": sequence,
+                "provider": PROVIDER,
+                "source_url": (
+                    f"https://api.openf1.org/v1/sessions?session_key={item.session_key}"
+                ),
+                "fetched_at": datetime.now(UTC),
+                "raw_metadata": __import__("json").dumps(
+                    {
+                        "derived_from": "openf1_session",
+                        "provider_session_id": str(item.session_key),
+                    }
+                ),
+            },
+        )
 
 
 async def load_season_races(session: AsyncSession, season: int) -> list[dict[str, Any]]:
@@ -83,7 +153,13 @@ async def upsert_sessions(session: AsyncSession, sessions: list[OpenF1Session], 
                      "source_url": f"https://api.openf1.org/v1/sessions?session_key={item.session_key}",
                      "fetched_at": datetime.now(UTC),
                      "raw_metadata": __import__("json").dumps({"circuit_key": item.circuit_key, "circuit_short_name": item.circuit_short_name, "country_name": item.country_name, "location": item.location})})
-            session_ids[item.session_key] = result.scalar_one()
+            session_id = result.scalar_one()
+            session_ids[item.session_key] = session_id
+            await _upsert_session_segments(
+                session,
+                session_id=session_id,
+                item=item,
+            )
     return session_ids
 
 

@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 import httpx
@@ -6,7 +7,9 @@ import pytest
 from app.ingestion.jolpica import (
     JolpicaClient,
     parse_calendar,
+    parse_constructor_identities,
     parse_constructor_standings,
+    parse_driver_identities,
     parse_driver_standings,
     parse_sprint_results,
 )
@@ -104,7 +107,9 @@ async def test_client_uses_round_scoped_driver_standings_endpoint() -> None:
         )
         assert await client.driver_standings(2026, 4) == []
 
-    assert requested == ["https://jolpica.test/ergast/f1/2026/4/driverstandings.json"]
+    assert requested == [
+        "https://jolpica.test/ergast/f1/2026/4/driverstandings.json?limit=2000"
+    ]
 
 
 @pytest.mark.asyncio
@@ -235,3 +240,55 @@ def test_parse_sprint_results_preserves_points_and_status() -> None:
     assert result.grid_position == 2
     assert result.status == "Finished"
     assert result.fastest_lap_rank == 2
+
+
+
+def test_parse_driver_identity_preserves_birth_date_and_source() -> None:
+    payload = {
+        "MRData": {
+            "DriverTable": {
+                "Drivers": [
+                    {
+                        "driverId": "example_driver",
+                        "givenName": "Example",
+                        "familyName": "Driver",
+                        "dateOfBirth": "1990-05-01",
+                        "nationality": "British",
+                        "permanentNumber": "42",
+                        "code": "EXA",
+                        "url": "https://example.test/driver",
+                    }
+                ]
+            }
+        }
+    }
+
+    row = parse_driver_identities(payload)[0]
+    assert row.driver_id == "example_driver"
+    assert row.date_of_birth == date(1990, 5, 1)
+    assert row.nationality == "British"
+    assert row.permanent_number == 42
+    assert row.source_url == "https://example.test/driver"
+
+
+def test_parse_constructor_identity_preserves_name_and_source() -> None:
+    payload = {
+        "MRData": {
+            "ConstructorTable": {
+                "Constructors": [
+                    {
+                        "constructorId": "historic_team",
+                        "name": "Historic Team",
+                        "nationality": "Italian",
+                        "url": "https://example.test/team",
+                    }
+                ]
+            }
+        }
+    }
+
+    row = parse_constructor_identities(payload)[0]
+    assert row.constructor_id == "historic_team"
+    assert row.name == "Historic Team"
+    assert row.nationality == "Italian"
+    assert row.source_url == "https://example.test/team"

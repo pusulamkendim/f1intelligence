@@ -307,9 +307,24 @@ WHERE e.entity_type = 'team'
   AND e.slug = 'sauber'
 ON CONFLICT (provider, provider_entity_type, provider_id) DO UPDATE
 SET entity_id = EXCLUDED.entity_id,
-    valid_from_season = EXCLUDED.valid_from_season,
-    valid_to_season = EXCLUDED.valid_to_season,
-    source_url = EXCLUDED.source_url,
+    valid_from_season = LEAST(
+        COALESCE(
+            entity_provider_ids.valid_from_season,
+            EXCLUDED.valid_from_season
+        ),
+        EXCLUDED.valid_from_season
+    ),
+    valid_to_season = GREATEST(
+        COALESCE(
+            entity_provider_ids.valid_to_season,
+            EXCLUDED.valid_to_season
+        ),
+        EXCLUDED.valid_to_season
+    ),
+    source_url = COALESCE(
+        entity_provider_ids.source_url,
+        EXCLUDED.source_url
+    ),
     updated_at = now();
 
 -- Canonical 2025 driver-team roster.

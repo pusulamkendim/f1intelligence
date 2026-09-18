@@ -219,11 +219,12 @@ async def ingest_driver_media(*, season: int = 2026) -> DriverMediaStats:
                 if row.headshot_url:
                     stats.headshots_found += 1
                 try:
-                    persisted = await _persist_portrait(
-                        session,
-                        row=row,
-                        season=season,
-                    )
+                    async with session.begin_nested():
+                        persisted = await _persist_portrait(
+                            session,
+                            row=row,
+                            season=season,
+                        )
                 except Exception:
                     stats.failures += 1
                     continue
@@ -234,12 +235,13 @@ async def ingest_driver_media(*, season: int = 2026) -> DriverMediaStats:
             if driver_entity_ids:
                 for seed in GROUP_PHOTOS:
                     try:
-                        links = await _persist_group_photo(
-                            session,
-                            seed=seed,
-                            season=season,
-                            driver_entity_ids=driver_entity_ids,
-                        )
+                        async with session.begin_nested():
+                            links = await _persist_group_photo(
+                                session,
+                                seed=seed,
+                                season=season,
+                                driver_entity_ids=driver_entity_ids,
+                            )
                     except Exception:
                         stats.failures += 1
                         continue

@@ -190,6 +190,15 @@ class JolpicaClient:
     async def race_results(self, season: int, round_number: int) -> list[JolpicaRaceResult]:
         return parse_race_results(await self._get(f"{season}/{round_number}/results.json"))
 
+    async def sprint_results(
+        self,
+        season: int,
+        round_number: int,
+    ) -> list[JolpicaSprintResult]:
+        return parse_sprint_results(
+            await self._get(f"{season}/{round_number}/sprint.json")
+        )
+
     async def qualifying_results(
         self, season: int, round_number: int
     ) -> list[JolpicaQualifyingResult]:
@@ -230,6 +239,14 @@ def parse_calendar(payload: dict[str, Any]) -> list[JolpicaRace]:
                 name=item["raceName"],
                 race_date=date.fromisoformat(item["date"]),
                 start_at=_utc_datetime(item["date"], item.get("time")),
+                sprint_start_at=(
+                    _utc_datetime(
+                        item["Sprint"]["date"],
+                        item["Sprint"].get("time"),
+                    )
+                    if item.get("Sprint")
+                    else None
+                ),
                 source_url=item.get("url"),
                 circuit=JolpicaCircuit(
                     provider_id=circuit["circuitId"],

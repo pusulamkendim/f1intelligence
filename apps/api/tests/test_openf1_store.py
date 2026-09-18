@@ -2,7 +2,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.ingestion.openf1 import OpenF1Meeting
-from app.ingestion.openf1_store import match_meetings_to_races
+from app.ingestion.openf1_store import (
+    match_meetings_to_races,
+    qualifying_segment_definitions,
+)
 
 
 def _meeting(key: int, date_end: datetime) -> OpenF1Meeting:
@@ -67,3 +70,12 @@ def test_meeting_outside_weekend_tolerance_is_not_matched() -> None:
     assert match_meetings_to_races(
         [_meeting(100, datetime(2026, 3, 12, 14, tzinfo=UTC))], races
     ) == {}
+
+
+def test_qualifying_segments_are_children_of_one_qualifying_session() -> None:
+    assert qualifying_segment_definitions("qualifying") == (
+        ("q1", "Q1", 1),
+        ("q2", "Q2", 2),
+        ("q3", "Q3", 3),
+    )
+    assert qualifying_segment_definitions("race") == ()

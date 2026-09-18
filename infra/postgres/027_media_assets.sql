@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS media_assets (
     source_role text NOT NULL DEFAULT 'discovery',
     source_provider text NOT NULL,
     source_asset_id text,
+    origin_provider text,
+    origin_asset_id text,
     discovered_via text NOT NULL,
     discovery_page_url text,
     original_url text NOT NULL,
@@ -107,6 +109,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS media_assets_provider_url_uq
 CREATE UNIQUE INDEX IF NOT EXISTS media_assets_provider_asset_id_uq
     ON media_assets(source_provider, source_asset_id)
     WHERE source_asset_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_assets_origin_asset_id_uq
+    ON media_assets(origin_provider, origin_asset_id)
+    WHERE origin_provider IS NOT NULL
+      AND origin_asset_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS media_assets_race_idx
     ON media_assets(race_id, captured_at);

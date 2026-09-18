@@ -55,6 +55,29 @@ CLASSIC_F1_TOKENS = {
     "pit-lane": "#8E8E93",
     "segment-unavailable": "#4A4A4A",
     "segment-unknown": "#6E6E73",
+    "flag-black-white": "#F2F2F2",
+    "flag-black": "#1C1C1E",
+}
+
+CHART_DATASETS: dict[str, tuple[str, ...]] = {
+    "positions": ("session_positions", "session_laps"),
+    "lap-times": ("session_laps",),
+    "stints": ("session_stints",),
+    "sectors": ("session_laps",),
+    "speeds": ("session_laps",),
+    "intervals": ("session_intervals",),
+    "pit-stops": ("session_pit_stops",),
+    "weather": ("session_weather",),
+    "overtakes": ("session_overtakes",),
+    "starting-grid": ("session_starting_grid",),
+    "segments": ("session_laps",),
+    "timing-tower": (
+        "session_positions",
+        "session_intervals",
+        "session_laps",
+        "session_stints",
+    ),
+    "session-result": ("session_results",),
 }
 
 CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
@@ -279,6 +302,10 @@ def _annotation_token(row: Any) -> str | None:
 
     if "CHEQUERED" in flag or "CHECKERED" in flag:
         return "flag-chequered"
+    if "BLACK AND WHITE" in flag:
+        return "flag-black-white"
+    if flag.startswith("BLACK"):
+        return "flag-black"
     if flag == "RED":
         return "flag-red"
     if "YELLOW" in flag:
@@ -294,6 +321,48 @@ def _annotation_token(row: Any) -> str | None:
     if "DRS" in combined:
         return "drs"
     return None
+
+
+async def _dataset_provenance(
+    session: AsyncSession,
+    session_id: Any,
+    tables: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    allowed = {
+        table
+        for configured in CHART_DATASETS.values()
+        for table in configured
+    } | {"session_race_control_events"}
+    provenance: list[dict[str, Any]] = []
+    for table in tables:
+        if table not in allowed:
+            raise ValueError("unsupported provenance table")
+        result = await session.execute(
+            text(
+                f"""
+                SELECT provider,
+                       source_url,
+                       max(fetched_at) AS fetched_at
+                FROM {table}
+                WHERE session_id = :session_id
+                GROUP BY provider, source_url
+                ORDER BY provider, source_url
+                """
+            ),
+            {"session_id": session_id},
+        )
+        for row in result.mappings().all():
+            provenance.append(
+                {
+                    "provider": row["provider"],
+                    "source_url": row["source_url"],
+                    "fetched_at": row["fetched_at"].isoformat()
+                    if row["fetched_at"]
+                    else None,
+                    "datasets": [table],
+                }
+            )
+    return provenance
 
 
 async def _annotations(
@@ -961,14 +1030,14 @@ async def race_visualization(
         presentation=presentation,
         series=series,
         annotations=annotations,
-        provenance=[
-            {
-                "provider": "openf1",
-                "source_url": context["source_url"],
-                "fetched_at": context["fetched_at"].isoformat()
-                if context["fetched_at"]
-                else None,
-                "datasets": [chart, "race_control"],
-            }
-        ],
+        provenance=await _dataset_provenance(
+            session,
+            session_id,
+            CHART_DATASETS[chart]
+            + (
+                ("session_race_control_events",)
+                if presentation["show_annotations"]
+                else ()
+            ),
+        ),
     )

@@ -221,6 +221,7 @@ async def _driver_rows(
                    e.display_name AS driver_label,
                    se.driver_number,
                    se.name_acronym AS driver_acronym,
+                   sr.position AS classification_position,
                    te.slug AS team_key,
                    COALESCE(te.display_name, se.team_name) AS team_label,
                    se.team_colour AS team_color
@@ -230,6 +231,9 @@ async def _driver_rows(
              AND se.driver_number = d.provider_driver_number
             LEFT JOIN entities e
               ON e.id = COALESCE(d.driver_entity_id, se.driver_entity_id)
+            LEFT JOIN session_results sr
+              ON sr.session_id = d.session_id
+             AND sr.driver_number = d.provider_driver_number
             LEFT JOIN entities te ON te.id = se.team_entity_id
             WHERE d.session_id = :session_id
               AND e.id IS NOT NULL
@@ -264,6 +268,7 @@ async def _position_rows(
                        e.display_name AS driver_label,
                        se.driver_number,
                        se.name_acronym AS driver_acronym,
+                       sr.position AS classification_position,
                        te.slug AS team_key,
                        COALESCE(te.display_name, se.team_name) AS team_label,
                        se.team_colour AS team_color
@@ -272,6 +277,9 @@ async def _position_rows(
                   ON se.session_id = :session_id
                  AND se.driver_number = lb.provider_driver_number
                 LEFT JOIN entities e ON e.id = se.driver_entity_id
+                LEFT JOIN session_results sr
+                  ON sr.session_id = se.session_id
+                 AND sr.driver_number = se.driver_number
                 LEFT JOIN entities te ON te.id = se.team_entity_id
                 JOIN LATERAL (
                     SELECT position
@@ -295,6 +303,7 @@ async def _position_rows(
                        e.display_name AS driver_label,
                        se.driver_number,
                        se.name_acronym AS driver_acronym,
+                       sr.position AS classification_position,
                        te.slug AS team_key,
                        COALESCE(te.display_name, se.team_name) AS team_label,
                        se.team_colour AS team_color
@@ -304,6 +313,9 @@ async def _position_rows(
                  AND se.driver_number = g.provider_driver_number
                 LEFT JOIN entities e
                   ON e.id = COALESCE(g.driver_entity_id, se.driver_entity_id)
+                LEFT JOIN session_results sr
+                  ON sr.session_id = se.session_id
+                 AND sr.driver_number = se.driver_number
                 LEFT JOIN entities te
                   ON te.id = COALESCE(g.team_entity_id, se.team_entity_id)
                 WHERE g.session_id = :session_id

@@ -32,6 +32,7 @@ class JolpicaRace:
     name: str
     race_date: date
     start_at: datetime | None
+    sprint_start_at: datetime | None
     source_url: str | None
     circuit: JolpicaCircuit
 
@@ -57,6 +58,23 @@ class JolpicaConstructorStanding:
     constructor_id: str
     name: str
     nationality: str | None
+
+
+@dataclass(frozen=True)
+class JolpicaSprintResult:
+    position: int | None
+    position_text: str
+    points: Decimal
+    driver_id: str
+    constructor_id: str | None
+    car_number: int | None
+    grid_position: int | None
+    laps: int | None
+    status: str | None
+    finish_time: str | None
+    fastest_lap_rank: int | None
+    fastest_lap_number: int | None
+    fastest_lap_time: str | None
 
 
 @dataclass(frozen=True)

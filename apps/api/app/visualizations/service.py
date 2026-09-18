@@ -13,8 +13,10 @@ from app.visualizations.series import (
     pit_stop_series,
     position_series,
     sector_series,
+    segment_series,
     speed_series,
     stint_series,
+    tyre_semantic_token,
 )
 
 Chart = Literal[
@@ -28,6 +30,9 @@ Chart = Literal[
     "weather",
     "overtakes",
     "starting-grid",
+    "segments",
+    "timing-tower",
+    "session-result",
 ]
 
 CLASSIC_F1_TOKENS = {
@@ -47,6 +52,9 @@ CLASSIC_F1_TOKENS = {
     "safety-car": "#FFD60A",
     "virtual-safety-car": "#FFD60A",
     "drs": "#39E75F",
+    "pit-lane": "#8E8E93",
+    "segment-unavailable": "#4A4A4A",
+    "segment-unknown": "#6E6E73",
 }
 
 CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
@@ -113,6 +121,30 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
         {"key": "grid_position", "label": "GRID", "formatter": "position"},
         {"key": "finish_position", "label": "RACE", "formatter": "position"},
         {"key": "points", "label": "PTS", "formatter": "raw"},
+    ],
+    "mini-sector-timing": [
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "lap", "label": "LAP", "formatter": "integer"},
+        {"key": "sector_1", "label": "S1", "formatter": "segments"},
+        {"key": "sector_2", "label": "S2", "formatter": "segments"},
+        {"key": "sector_3", "label": "S3", "formatter": "segments"},
+    ],
+    "timing-tower": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "gap", "label": "GAP", "formatter": "delta"},
+        {"key": "interval", "label": "INT", "formatter": "delta"},
+        {"key": "last_lap_seconds", "label": "LAST LAP", "formatter": "lap-time"},
+        {"key": "compound", "label": "TYRE", "align": "center"},
+        {"key": "tyre_age", "label": "AGE", "formatter": "integer"},
+    ],
+    "session-classification": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "gap", "label": "GAP", "align": "right"},
+        {"key": "duration_seconds", "label": "TIME", "formatter": "lap-time"},
+        {"key": "number_of_laps", "label": "LAPS", "formatter": "integer"},
+        {"key": "status", "label": "STATUS", "align": "left"},
     ],
 }
 

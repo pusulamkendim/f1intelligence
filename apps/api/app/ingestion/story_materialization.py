@@ -1039,11 +1039,12 @@ async def _story_audit_counts(session: AsyncSession) -> tuple[int, int, int, int
 async def materialize_existing_source_items(
     session: AsyncSession,
     *,
-    limit: int = 500,
+    limit: int | None = None,
 ) -> StoryMaterializationBatchStats:
+    limit_clause = "LIMIT :limit" if limit is not None else ""
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 id,
                 provider,
@@ -1056,10 +1057,10 @@ async def materialize_existing_source_items(
                 published_at
             FROM source_items
             ORDER BY COALESCE(published_at, fetched_at), id
-            LIMIT :limit
+            {limit_clause}
             """
         ),
-        {"limit": limit},
+        {"limit": limit} if limit is not None else {},
     )
     rows = result.mappings().all()
     counts = {

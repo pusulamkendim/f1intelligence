@@ -25,14 +25,14 @@ ingestion-setup:
 		infra/postgres/009_fia_event_documents.sql infra/postgres/010_structured_race_data.sql infra/postgres/011_structured_entity_links.sql infra/postgres/012_race_weekend_sessions.sql \
 		infra/postgres/013_openf1_lap_stint_position.sql infra/postgres/014_evidence_canonical_provenance.sql infra/postgres/015_structured_race_context.sql infra/postgres/016_session_starting_grid.sql \
 		infra/postgres/017_session_overtakes.sql infra/postgres/018_calendar_amendment_safe_race_identity.sql infra/postgres/019_source_item_entities.sql infra/postgres/020_story_source_clustering.sql \
-		infra/postgres/021_editorial_person_registry.sql infra/postgres/022_story_materialization.sql infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql; do \
+		infra/postgres/021_editorial_person_registry.sql infra/postgres/022_story_materialization.sql infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql infra/postgres/027_media_assets.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 
 ingestion-migrate:
 	@for migration in \
 		infra/postgres/019_source_item_entities.sql infra/postgres/020_story_source_clustering.sql infra/postgres/021_editorial_person_registry.sql infra/postgres/022_story_materialization.sql \
-		infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql; do \
+		infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql infra/postgres/027_media_assets.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 

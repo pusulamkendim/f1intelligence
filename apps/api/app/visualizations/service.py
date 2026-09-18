@@ -143,6 +143,12 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
         {"key": "points", "label": "PTS", "formatter": "raw"},
         {"key": "wins", "label": "WINS", "formatter": "integer"},
     ],
+    "constructor-standings": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "team_label", "label": "TEAM", "align": "left"},
+        {"key": "points", "label": "PTS", "formatter": "raw"},
+        {"key": "wins", "label": "WINS", "formatter": "integer"},
+    ],
     "driver-season-results": [
         {"key": "round", "label": "RD", "formatter": "integer"},
         {"key": "race_label", "label": "GRAND PRIX", "align": "left"},

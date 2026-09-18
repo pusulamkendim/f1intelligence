@@ -237,3 +237,31 @@ def test_failed_live_endpoints_are_explicitly_disabled() -> None:
     assert SOURCE_BY_KEY["team_red_bull"].discovery_url == "https://www.redbullracing.com/int-en"
     assert SOURCE_BY_KEY["team_racing_bulls"].provider == "visacashapprb.com"
     assert SOURCE_BY_KEY["team_audi"].discovery_url.endswith("audi-formula-racing-gmbh-17953")
+
+
+
+def test_generic_article_parser_captures_open_graph_image_reference() -> None:
+    source = EditorialSource(
+        key="team_test",
+        provider="team.example",
+        source_class="first_party_team",
+        mode="listing",
+        discovery_url="https://team.example/news",
+    )
+    html = """
+    <html><head>
+      <meta property="og:title" content="Spanish GP race report" />
+      <meta property="og:image" content="/media/spanish-gp.jpg" />
+    </head></html>
+    """
+
+    item = parse_article_html(
+        html,
+        requested_url="https://team.example/news/spanish-gp",
+        source=source,
+    )
+
+    assert item.raw_metadata["image_url"] == (
+        "https://team.example/media/spanish-gp.jpg"
+    )
+    assert item.raw_metadata["image_source"] == "open_graph"

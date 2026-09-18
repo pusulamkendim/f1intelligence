@@ -109,3 +109,27 @@ def test_f1_fansite_parser_rejects_small_figure_without_full_asset() -> None:
             "photos-of-the-2026-british-f1-gp/"
         ),
     ) == []
+
+
+
+def test_f1_fansite_parser_accepts_large_gallery_image_outside_figure() -> None:
+    html = """
+    <article>
+      <h1>Photos of Friday Practice before the 2026 Italian F1 GP</h1>
+      <img
+        src="/wp-content/uploads/2026/09/32-friday-monza-2026-990x660.jpg"
+        alt="Lewis Hamilton on track at Monza"
+      />
+    </article>
+    """
+
+    items = parse_gallery_html(
+        html,
+        gallery_url=(
+            "https://www.f1-fansite.com/f1-wallpaper/"
+            "photos-of-friday-practice-before-the-2026-italian-f1-gp/"
+        ),
+    )
+
+    assert len(items) == 1
+    assert items[0].image_url.endswith("32-friday-monza-2026-990x660.jpg")

@@ -256,37 +256,66 @@ async def _position_rows(
                 FROM session_laps
                 WHERE session_id = :session_id
                   AND started_at IS NOT NULL
+            ),
+            lap_positions AS (
+                SELECT lb.lap_number,
+                       p.position,
+                       e.slug AS driver_key,
+                       e.display_name AS driver_label,
+                       se.driver_number,
+                       se.name_acronym AS driver_acronym,
+                       te.slug AS team_key,
+                       COALESCE(te.display_name, se.team_name) AS team_label,
+                       se.team_colour AS team_color
+                FROM lap_boundaries lb
+                JOIN session_entries se
+                  ON se.session_id = :session_id
+                 AND se.driver_number = lb.provider_driver_number
+                LEFT JOIN entities e ON e.id = se.driver_entity_id
+                LEFT JOIN entities te ON te.id = se.team_entity_id
+                JOIN LATERAL (
+                    SELECT position
+                    FROM session_positions p
+                    WHERE p.session_id = :session_id
+                      AND p.provider_driver_number = lb.provider_driver_number
+                      AND p.observed_at >= lb.started_at
+                      AND (
+                          lb.next_lap_at IS NULL
+                          OR p.observed_at < lb.next_lap_at
+                      )
+                    ORDER BY p.observed_at DESC
+                    LIMIT 1
+                ) p ON true
+                WHERE e.id IS NOT NULL
+            ),
+            grid_positions AS (
+                SELECT 0 AS lap_number,
+                       g.position,
+                       e.slug AS driver_key,
+                       e.display_name AS driver_label,
+                       se.driver_number,
+                       se.name_acronym AS driver_acronym,
+                       te.slug AS team_key,
+                       COALESCE(te.display_name, se.team_name) AS team_label,
+                       se.team_colour AS team_color
+                FROM session_starting_grid g
+                JOIN session_entries se
+                  ON se.session_id = g.session_id
+                 AND se.driver_number = g.provider_driver_number
+                LEFT JOIN entities e
+                  ON e.id = COALESCE(g.driver_entity_id, se.driver_entity_id)
+                LEFT JOIN entities te
+                  ON te.id = COALESCE(g.team_entity_id, se.team_entity_id)
+                WHERE g.session_id = :session_id
+                  AND e.id IS NOT NULL
             )
-            SELECT lb.lap_number,
-                   p.position,
-                   e.slug AS driver_key,
-                   e.display_name AS driver_label,
-                   se.driver_number,
-                   se.name_acronym AS driver_acronym,
-                   te.slug AS team_key,
-                   COALESCE(te.display_name, se.team_name) AS team_label,
-                   se.team_colour AS team_color
-            FROM lap_boundaries lb
-            JOIN session_entries se
-              ON se.session_id = :session_id
-             AND se.driver_number = lb.provider_driver_number
-            LEFT JOIN entities e ON e.id = se.driver_entity_id
-            LEFT JOIN entities te ON te.id = se.team_entity_id
-            JOIN LATERAL (
-                SELECT position
-                FROM session_positions p
-                WHERE p.session_id = :session_id
-                  AND p.provider_driver_number = lb.provider_driver_number
-                  AND p.observed_at >= lb.started_at
-                  AND (
-                      lb.next_lap_at IS NULL
-                      OR p.observed_at < lb.next_lap_at
-                  )
-                ORDER BY p.observed_at DESC
-                LIMIT 1
-            ) p ON true
-            WHERE e.id IS NOT NULL
-            ORDER BY lb.lap_number, e.slug
+            SELECT *
+            FROM (
+                SELECT * FROM grid_positions
+                UNION ALL
+                SELECT * FROM lap_positions
+            ) points
+            ORDER BY lap_number, driver_key
             """
         ),
         {"session_id": session_id},

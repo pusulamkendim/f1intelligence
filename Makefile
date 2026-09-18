@@ -32,7 +32,7 @@ ingestion-setup:
 ingestion-migrate:
 	@for migration in \
 		infra/postgres/019_source_item_entities.sql infra/postgres/020_story_source_clustering.sql infra/postgres/021_editorial_person_registry.sql infra/postgres/022_story_materialization.sql \
-		infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql infra/postgres/027_media_assets.sql infra/postgres/028_statistics_semantics.sql infra/postgres/029_jolpica_2025_entity_registry.sql infra/postgres/030_entity_auto_reconciliation.sql; do \
+		infra/postgres/023_story_quality_v2.sql infra/postgres/024_unified_timeline.sql infra/postgres/025_historical_statistics.sql infra/postgres/026_openf1_location.sql infra/postgres/027_media_assets.sql infra/postgres/028_statistics_semantics.sql infra/postgres/029_jolpica_2025_entity_registry.sql infra/postgres/030_entity_auto_reconciliation.sql infra/postgres/031_qualifying_segments.sql; do \
 			docker compose --env-file .env exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$migration" || exit $$?; \
 	done
 

@@ -3,9 +3,14 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+import app.ingestion.story_materialization as story_materialization
 from app.ingestion.content_cleanup import clean_summary, clean_title
 from app.ingestion.source_item_entities import SourceItemEntityClassification
-from app.ingestion.story_materialization import _create_story, classify_story_worthiness
+from app.ingestion.story_materialization import (
+    _converge_event_fingerprint_stories,
+    _create_story,
+    classify_story_worthiness,
+)
 
 
 def _classification(
@@ -189,3 +194,73 @@ def test_create_story_sql_does_not_parse_json_as_bind_parameter() -> None:
     )
 
     assert result == story_id
+
+
+
+class _RowsResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+
+class _ConvergenceSession:
+    def __init__(self, rows):
+        self.rows = rows
+        self.calls = 0
+
+    async def execute(self, statement, params=None):
+        self.calls += 1
+        if self.calls == 1:
+            return _RowsResult(self.rows)
+        return _RowsResult([])
+
+
+def test_event_fingerprint_convergence_merges_split_roots() -> None:
+    left = uuid4()
+    right = uuid4()
+    session = _ConvergenceSession(
+        [
+            {
+                "fingerprint": (
+                    "personnel_appointment:"
+                    "alpine:technical_leadership"
+                ),
+                "story_ids": [left, right],
+            }
+        ]
+    )
+    merged_pairs: list[tuple[UUID, UUID]] = []
+    refreshed: list[UUID] = []
+
+    async def fake_merge(_session, left_story_id, right_story_id):
+        merged_pairs.append((left_story_id, right_story_id))
+        return left_story_id
+
+    async def fake_refresh(_session, story_id):
+        refreshed.append(story_id)
+
+    original_merge = story_materialization._merge_auto_stories
+    original_refresh = story_materialization.refresh_story_aggregate
+    original_media = story_materialization.refresh_story_media_from_sources
+    story_materialization._merge_auto_stories = fake_merge
+    story_materialization.refresh_story_aggregate = fake_refresh
+    story_materialization.refresh_story_media_from_sources = fake_refresh
+    try:
+        merges = asyncio.run(
+            _converge_event_fingerprint_stories(
+                session,  # type: ignore[arg-type]
+            )
+        )
+    finally:
+        story_materialization._merge_auto_stories = original_merge
+        story_materialization.refresh_story_aggregate = original_refresh
+        story_materialization.refresh_story_media_from_sources = original_media
+
+    assert merges == 1
+    assert merged_pairs == [(left, right)]
+    assert refreshed == [left, left]

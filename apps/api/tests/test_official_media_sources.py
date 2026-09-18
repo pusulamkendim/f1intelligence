@@ -118,3 +118,122 @@ def test_media_source_access_challenge_is_detected() -> None:
         "<html>Register</html>",
         response_url="https://www.f1-fansite.com/register/",
     ) == "login_or_registration_redirect"
+
+
+
+def test_williams_parser_unwraps_next_image_and_rejects_shop_assets() -> None:
+    source = OFFICIAL_MEDIA_SOURCE_BY_KEY["williams"]
+    html = """
+    <html>
+      <head>
+        <meta property="article:published_time" content="2026-09-07T12:00:00Z" />
+      </head>
+      <body>
+        <article>
+          <h1>In Photos: Our weekend in Monza</h1>
+          <img
+            src="/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Ffnx611yr%2Fproductionv2%2Fmonza-8192x5464.jpg%3Fw%3D1920%26h%3D1080%26auto%3Dformat&w=3840&q=75"
+            alt="In Photos: Our weekend in Monza"
+          />
+          <img
+            src="/_next/image?url=https%3A%2F%2Fmcprod.williamsf1.com%2Fmedia%2Fcatalog%2Fproduct%2Fcache%2Fx%2Fmiami_cover.jpg&w=3840&q=75"
+            alt="AWF1 Team x Marvel - Iron Man: Racing Towards Doom Miami Special Edition Cover"
+          />
+        </article>
+      </body>
+    </html>
+    """
+
+    items = parse_official_media_page(
+        html,
+        page_url="https://www.williamsf1.com/articles/id/in-photos-our-weekend-in-monza",
+        source=source,
+    )
+
+    assert len(items) == 1
+    assert items[0].image_url.startswith("https://cdn.sanity.io/")
+    assert "/_next/image" not in items[0].image_url
+    assert items[0].season == 2026
+
+
+def test_alpine_parser_filters_cross_event_cards_and_deduplicates_variants() -> None:
+    source = OFFICIAL_MEDIA_SOURCE_BY_KEY["alpine"]
+    html = """
+    <html>
+      <head>
+        <meta property="article:published_time" content="2026-09-11T12:00:00Z" />
+      </head>
+      <body>
+        <article>
+          <h1>2026 Formula One Spanish Grand Prix, Friday</h1>
+          <img
+            src="/wp-content/uploads/2026/09/abcabcabcabcabcabcabcabcabcabcab-t.jpg"
+            alt="Image - 2026 Formula One Spanish Grand Prix, Friday"
+          />
+          <img
+            src="/wp-content/uploads/2026/09/abcabcabcabcabcabcabcabcabcabcab-m.jpg.webp"
+            alt="Image - 2026 Formula One Spanish Grand Prix, Friday"
+          />
+          <img
+            src="/wp-content/uploads/2026/09/abcabcabcabcabcabcabcabcabcabcab-l.jpg.webp"
+            alt="Image - 2026 Formula One Spanish Grand Prix, Friday"
+          />
+          <img
+            src="/wp-content/uploads/2026/09/defdefdefdefdefdefdefdefdefdefde-l.jpg.webp"
+            alt="Image - 2026 Formula One Italian Grand Prix, Sunday"
+          />
+          <img
+            src="/wp-content/uploads/2026/09/99999999999999999999999999999999-l.jpg.webp"
+            alt="Image - BWT Alpine Formula One Team and SEALSQ announce a partnership"
+          />
+        </article>
+      </body>
+    </html>
+    """
+
+    items = parse_official_media_page(
+        html,
+        page_url=(
+            "https://media.alpinecars.com/"
+            "2026-formula-one-spanish-grand-prix-friday/?lang=eng"
+        ),
+        source=source,
+    )
+
+    assert len(items) == 1
+    assert items[0].image_url.endswith(
+        "abcabcabcabcabcabcabcabcabcabcab-l.jpg.webp"
+    )
+    assert items[0].season == 2026
+
+
+def test_parser_prefers_article_scope_over_related_page_images() -> None:
+    html = """
+    <html>
+      <body>
+        <main>
+          <article>
+            <h1>2026 Italian Grand Prix gallery</h1>
+            <img
+              src="/images/monza-2000x1200.jpg"
+              alt="Cars driving on track at Monza"
+            />
+          </article>
+          <section>
+            <img
+              src="/images/related-2000x1200.jpg"
+              alt="Unrelated promotional feature"
+            />
+          </section>
+        </main>
+      </body>
+    </html>
+    """
+
+    items = parse_official_media_page(
+        html,
+        page_url="https://example.com/gallery",
+    )
+
+    assert len(items) == 1
+    assert items[0].image_url.endswith("monza-2000x1200.jpg")

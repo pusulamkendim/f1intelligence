@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     media_storage_backend: str = "local"
     media_storage_path: str = ".data/media"
+    media_r2_account_id: str | None = None
+    media_r2_access_key_id: str | None = None
+    media_r2_secret_access_key: str | None = None
+    media_r2_private_bucket: str | None = None
+    media_r2_public_bucket: str | None = None
+    media_r2_public_base_url: str | None = None
     wikimedia_user_agent: str = Field(
         default="F1Intelligence/0.1 (development)",
         min_length=8,

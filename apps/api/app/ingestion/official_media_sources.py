@@ -387,10 +387,16 @@ def _credit_metadata(
 
 
 class _PageMediaParser(HTMLParser):
-    def __init__(self, page_url: str) -> None:
+    def __init__(
+        self,
+        page_url: str,
+        source: OfficialMediaSource | None,
+    ) -> None:
         super().__init__(convert_charrefs=True)
         self.page_url = page_url
+        self.source = source
         self.page_title: str | None = None
+        self.published_year: int | None = None
         self._meta_title: str | None = None
         self._og_image: str | None = None
         self._capture_h1 = False
@@ -400,19 +406,35 @@ class _PageMediaParser(HTMLParser):
         self._caption_parts: list[str] = []
         self._figure_url: tuple[str, int] | None = None
         self._figure_alt: str | None = None
-        self.items: list[tuple[str, str | None, str | None]] = []
-        self._seen: set[str] = set()
+        self._figure_scope = 0
+        self._article_depth = 0
+        self._main_depth = 0
+        self._ignored_depth = 0
+        self.items: list[
+            tuple[str, str | None, str | None, int, int]
+        ] = []
+
+    def _scope(self) -> int:
+        if self._article_depth > 0:
+            return 2
+        if self._main_depth > 0:
+            return 1
+        return 0
 
     def _append(
         self,
         image_url: str,
         caption: str | None,
         alt_text: str | None,
+        *,
+        scope: int,
+        score: int,
     ) -> None:
-        if image_url in self._seen:
+        if self._ignored_depth:
             return
-        self._seen.add(image_url)
-        self.items.append((image_url, caption, alt_text))
+        if not _source_allows_image(self.source, image_url):
+            return
+        self.items.append((image_url, caption, alt_text, scope, score))
 
     def handle_starttag(
         self,
@@ -422,16 +444,36 @@ class _PageMediaParser(HTMLParser):
         values = {key.casefold(): value for key, value in attrs if value is not None}
         lower = tag.casefold()
 
+        if lower == "article":
+            self._article_depth += 1
+        elif lower == "main":
+            self._main_depth += 1
+        elif lower in {"nav", "footer", "aside"}:
+            self._ignored_depth += 1
+
         if lower == "meta":
             key = (values.get("property") or values.get("name") or "").casefold()
             content = values.get("content")
             if key == "og:title" and content:
                 self._meta_title = content.strip()
             elif key in {"og:image", "twitter:image"} and content and self._og_image is None:
-                candidate = urljoin(self.page_url, content)
-                if not _low_value_image(candidate):
+                candidate = _normalize_image_url(content, base_url=self.page_url)
+                if (
+                    _source_allows_image(self.source, candidate)
+                    and not _low_value_image(candidate)
+                ):
                     self._og_image = candidate
+            if content and (
+                "published" in key
+                or key in {"date", "datepublished", "article:published_time"}
+            ):
+                self.published_year = self.published_year or _published_year(content)
             return
+
+        if lower == "time" and values.get("datetime"):
+            self.published_year = self.published_year or _published_year(
+                values["datetime"]
+            )
 
         if lower == "h1" and self.page_title is None:
             self._capture_h1 = True
@@ -442,6 +484,7 @@ class _PageMediaParser(HTMLParser):
             self._in_figure = True
             self._figure_url = None
             self._figure_alt = None
+            self._figure_scope = self._scope()
             self._caption_parts = []
             return
 
@@ -450,8 +493,15 @@ class _PageMediaParser(HTMLParser):
             self._caption_parts = []
             return
 
+        if self._ignored_depth:
+            return
+
         if lower == "a" and self._in_figure:
-            candidate = _image_href(values.get("href"), base_url=self.page_url)
+            candidate = _image_href(
+                values.get("href"),
+                base_url=self.page_url,
+                source=self.source,
+            )
             if candidate and not _low_value_image(candidate):
                 self._figure_url = (candidate, 20_000)
             return
@@ -460,9 +510,11 @@ class _PageMediaParser(HTMLParser):
             candidates = _srcset_candidates(
                 values.get("srcset") or values.get("data-srcset"),
                 base_url=self.page_url,
+                source=self.source,
             )
             candidates = [
-                item for item in candidates
+                item
+                for item in candidates
                 if not _low_value_image(item[0], width_hint=item[1])
             ]
             if candidates:
@@ -473,7 +525,11 @@ class _PageMediaParser(HTMLParser):
 
         if lower != "img":
             return
-        candidate = _best_img_candidate(values, base_url=self.page_url)
+        candidate = _best_img_candidate(
+            values,
+            base_url=self.page_url,
+            source=self.source,
+        )
         if candidate is None:
             return
         image_url, score = candidate
@@ -484,7 +540,13 @@ class _PageMediaParser(HTMLParser):
             if alt:
                 self._figure_alt = alt
         elif alt or score >= 900:
-            self._append(image_url, alt, alt)
+            self._append(
+                image_url,
+                alt,
+                alt,
+                scope=self._scope(),
+                score=score,
+            )
 
     def handle_data(self, data: str) -> None:
         if self._capture_h1:
@@ -504,28 +566,90 @@ class _PageMediaParser(HTMLParser):
         elif lower == "figure" and self._in_figure:
             caption = " ".join("".join(self._caption_parts).split()) or None
             if self._figure_url is not None:
-                self._append(self._figure_url[0], caption or self._figure_alt, self._figure_alt)
+                self._append(
+                    self._figure_url[0],
+                    caption or self._figure_alt,
+                    self._figure_alt,
+                    scope=self._figure_scope,
+                    score=self._figure_url[1],
+                )
             self._in_figure = False
             self._figure_url = None
             self._figure_alt = None
+            self._figure_scope = 0
             self._caption_parts = []
+
+        if lower == "article" and self._article_depth:
+            self._article_depth -= 1
+        elif lower == "main" and self._main_depth:
+            self._main_depth -= 1
+        elif lower in {"nav", "footer", "aside"} and self._ignored_depth:
+            self._ignored_depth -= 1
 
 
 def parse_official_media_page(
     html_text: str,
     *,
     page_url: str,
+    source: OfficialMediaSource | None = None,
 ) -> list[OfficialMediaItem]:
-    parser = _PageMediaParser(page_url)
+    parser = _PageMediaParser(page_url, source)
     parser.feed(html_text)
     parser.close()
     page_title = parser.page_title or parser._meta_title
 
-    if parser._og_image and parser._og_image not in parser._seen:
-        parser._append(parser._og_image, page_title, page_title)
+    scoped_items = parser.items
+    if any(item[3] == 2 for item in scoped_items):
+        scoped_items = [item for item in scoped_items if item[3] == 2]
+    elif any(item[3] == 1 for item in scoped_items):
+        scoped_items = [item for item in scoped_items if item[3] == 1]
+
+    if parser._og_image and not scoped_items:
+        scoped_items.append(
+            (
+                parser._og_image,
+                page_title,
+                page_title,
+                0,
+                50_000,
+            )
+        )
+
+    by_family: dict[
+        str,
+        tuple[str, str | None, str | None, int, int],
+    ] = {}
+    for item in scoped_items:
+        image_url, caption, alt_text, scope, score = item
+        effective_caption = caption or alt_text or page_title
+        if not _caption_matches_page_event(
+            source=source,
+            page_title=page_title,
+            caption=effective_caption,
+        ):
+            continue
+        family = _asset_family_key(image_url, source=source)
+        existing = by_family.get(family)
+        rank = (
+            scope,
+            _asset_variant_rank(image_url, source=source),
+            score,
+        )
+        if existing is not None:
+            existing_rank = (
+                existing[3],
+                _asset_variant_rank(existing[0], source=source),
+                existing[4],
+            )
+            if rank <= existing_rank:
+                continue
+        by_family[family] = item
+
+    page_event = _event_key(page_title)
+    season = parser.published_year or (page_event[0] if page_event else None)
 
     output: list[OfficialMediaItem] = []
-    for image_url, caption, alt_text in parser.items:
+    for image_url, caption, alt_text, _scope, _score in by_family.values():
         effective_caption = caption or alt_text or page_title
         photographer, agency, origin_provider = _credit_metadata(effective_caption)
         output.append(
@@ -539,6 +663,8 @@ def parse_official_media_page(
                 photographer=photographer,
                 agency=agency,
                 origin_provider=origin_provider,
+                season=season,
             )
         )
     return output
+

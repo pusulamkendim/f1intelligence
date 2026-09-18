@@ -169,6 +169,7 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
     "timing-tower": [
         {"key": "position", "label": "POS", "formatter": "position"},
         {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "position_change", "label": "Δ", "formatter": "signed-integer"},
         {"key": "gap", "label": "GAP", "formatter": "delta"},
         {"key": "interval", "label": "INT", "formatter": "delta"},
         {"key": "last_lap_seconds", "label": "LAST LAP", "formatter": "lap-time"},
@@ -671,6 +672,7 @@ async def _timing_tower_series(
                    COALESCE(te.display_name, se.team_name) AS team_label,
                    se.team_colour AS team_color,
                    pos.position,
+                   grid.position AS grid_position,
                    iv.gap_to_leader_seconds,
                    iv.gap_to_leader_text,
                    iv.interval_seconds,
@@ -685,6 +687,13 @@ async def _timing_tower_series(
             FROM session_entries se
             LEFT JOIN entities e ON e.id = se.driver_entity_id
             LEFT JOIN entities te ON te.id = se.team_entity_id
+            LEFT JOIN LATERAL (
+                SELECT g.position
+                FROM session_starting_grid g
+                WHERE g.session_id = se.session_id
+                  AND g.provider_driver_number = se.driver_number
+                LIMIT 1
+            ) grid ON true
             LEFT JOIN LATERAL (
                 SELECT p.position
                 FROM session_positions p
@@ -745,8 +754,13 @@ async def _timing_tower_series(
         ):
             tyre_age += max(row["lap_number"] - row["lap_start"], 0)
         gap = row["gap_to_leader_text"]
-        if gap is None and row["gap_to_leader_seconds"] is not None:
+        if row["position"] == 1:
+            gap = "LEADER"
+        elif gap is None and row["gap_to_leader_seconds"] is not None:
             gap = float(row["gap_to_leader_seconds"])
+        position_change = None
+        if row["grid_position"] is not None and row["position"] is not None:
+            position_change = row["grid_position"] - row["position"]
         interval = row["interval_text"]
         if interval is None and row["interval_seconds"] is not None:
             interval = float(row["interval_seconds"])
@@ -764,6 +778,8 @@ async def _timing_tower_series(
                 "points": [
                     {
                         "position": row["position"],
+                        "grid_position": row["grid_position"],
+                        "position_change": position_change,
                         "gap": gap,
                         "gap_seconds": row["gap_to_leader_seconds"],
                         "interval": interval,

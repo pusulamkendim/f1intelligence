@@ -63,6 +63,7 @@ class VisualizationSeries(BaseModel):
     unit: str | None = None
     driver_number: int | None = None
     driver_acronym: str | None = None
+    classification_position: int | None = None
     team_key: str | None = None
     team_label: str | None = None
     color: str | None = None

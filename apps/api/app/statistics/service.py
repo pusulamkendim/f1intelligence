@@ -148,7 +148,7 @@ async def _historical_rows(
     standings = (
         await db.execute(
             text(
-                """
+                f"""
                 WITH latest AS (
                     SELECT DISTINCT ON (dss.season)
                         dss.id,

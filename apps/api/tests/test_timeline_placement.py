@@ -11,6 +11,7 @@ from app.timeline.placement import (
     explicit_historical_event_year,
     explicit_season,
     infer_lap_number,
+    infer_qualifying_segment,
     infer_session_code,
     infer_stint_number,
     infer_story_coordinate,
@@ -33,6 +34,25 @@ def test_qualifying_story_maps_to_qualifying_session() -> None:
     assert placement.precision == "session"
     assert placement.temporal_relation == "occurred_at"
 
+
+
+
+def test_q2_story_maps_to_qualifying_segment() -> None:
+    reported = datetime(2026, 9, 12, 17, 30, tzinfo=UTC)
+    race_start = datetime(2026, 9, 13, 13, 0, tzinfo=UTC)
+    placement = infer_story_coordinate(
+        text_value="Norris knocked out in Q2 at the Spanish Grand Prix",
+        taxonomy="sporting",
+        reported_at=reported,
+        race_season=2026,
+        race_anchor_at=race_start,
+    )
+
+    assert infer_qualifying_segment("Q2 elimination") == "q2"
+    assert placement.session_code == "qualifying"
+    assert placement.segment_code == "q2"
+    assert placement.precision == "segment"
+    assert placement.temporal_relation == "occurred_at"
 
 def test_future_race_upgrade_is_scheduled_for_target_race() -> None:
     reported = datetime(2026, 9, 18, 10, 0, tzinfo=UTC)

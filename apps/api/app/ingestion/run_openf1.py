@@ -10,7 +10,12 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.ingestion.openf1 import OPENF1_BASE_URL, OpenF1Client, OpenF1Session
+from app.ingestion.openf1 import (
+    OPENF1_BASE_URL,
+    RETRYABLE_STATUSES,
+    OpenF1Client,
+    OpenF1Session,
+)
 from app.ingestion.openf1_canonicalize import reconcile_unresolved_session_drivers
 from app.ingestion.openf1_context import parse_intervals, parse_pit_stops, parse_race_control, parse_weather
 from app.ingestion.openf1_context_store import (
@@ -119,6 +124,29 @@ def _race_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
 
 def _grid_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
     return [item for item in sessions if item.session_code == "race"]
+
+
+async def _fetch_locations_optional(
+    client: OpenF1Client,
+    item: OpenF1Session,
+    *,
+    now: datetime | None = None,
+) -> tuple[list, int | None]:
+    current = now or datetime.now(UTC)
+    location_end = min(item.date_end or current, current)
+    try:
+        rows = await client.locations(
+            item.session_key,
+            date_start=item.date_start,
+            date_end=location_end,
+            sample_interval_ms=1000,
+        )
+        return rows, None
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status == 404 or status in RETRYABLE_STATUSES:
+            return [], status
+        raise
 
 
 async def _fetch_context_rows(
@@ -249,20 +277,29 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                     await _audit(db, dataset="telemetry", season=season, records_seen=len(laps) + len(stints) + len(positions), records_written=lap_count + stint_count + position_count, metadata={"session_key": item.session_key, "session_code": item.session_code, "laps": lap_count, "stints": stint_count, "positions": position_count})
             telemetry_summary.append({"session_key": item.session_key, "laps": len(laps), "stints": len(stints), "positions": len(positions)})
 
-        location_summary: list[dict[str, int]] = []
+        location_summary: list[dict[str, object]] = []
         for item in _location_candidates(
             race_sessions,
             location_cached,
             limit=telemetry_limit,
         ):
-            current = datetime.now(UTC)
-            location_end = min(item.date_end or current, current)
-            locations = await client.locations(
-                item.session_key,
-                date_start=item.date_start,
-                date_end=location_end,
-                sample_interval_ms=1000,
+            locations, location_http_status = (
+                await _fetch_locations_optional(
+                    client,
+                    item,
+                )
             )
+            if location_http_status is not None:
+                location_summary.append(
+                    {
+                        "session_key": item.session_key,
+                        "locations": 0,
+                        "skipped": 1,
+                        "http_status": location_http_status,
+                    }
+                )
+                continue
+
             drivers = await client.drivers(item.session_key)
             async with SessionLocal() as db:
                 async with db.begin():

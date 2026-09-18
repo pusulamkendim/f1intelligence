@@ -434,9 +434,24 @@ def _race_anchor_is_eligible(
 ) -> bool:
     alias_type = str(race.get("alias_type") or "")
     detected = set(race.get("detected_in") or [])
+    prominent_scope = bool(
+        detected.intersection({"title", "standfirst", "summary"})
+    )
 
     if alias_type in {"race_name", "canonical"}:
-        return bool(detected.intersection({"title", "standfirst", "summary"}))
+        return prominent_scope
+
+    # Source-level evidence is authoritative even if an alias-type lookup is
+    # unavailable on an older/migrated database. A lexical Grand Prix/GP alias
+    # is still an event-name signal, unlike bare venue aliases such as Madring,
+    # Silverstone or Budapest.
+    alias = _normalized(str(race.get("matched_alias") or ""))
+    lexical_event_alias = (
+        "grand prix" in alias
+        or bool(re.search(r"\bgp\b", alias))
+    )
+    if prominent_scope and lexical_event_alias:
+        return True
 
     if alias_type == "venue":
         if "title" not in detected:

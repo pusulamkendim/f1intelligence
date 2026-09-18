@@ -394,12 +394,11 @@ def _select_story_race(
                 key=lambda race: race["anchor_at"],
             )
 
-    title_matches = [
-        race
-        for race in races
-        if _normalized(str(race.get("matched_alias") or ""))
-        in normalized
-    ]
+    title_matches = []
+    for race in races:
+        alias = _normalized(str(race.get("matched_alias") or ""))
+        if alias and alias in normalized:
+            title_matches.append(race)
     if len(title_matches) == 1:
         return title_matches[0]
     if title_matches:

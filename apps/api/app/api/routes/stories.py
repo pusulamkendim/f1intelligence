@@ -9,6 +9,7 @@ from app.schemas.story import (
     EvidenceItem,
     StoryDetail,
     StoryEntity,
+    StoryMediaCandidate,
     StorySourceItem,
     StorySummary,
 )
@@ -36,11 +37,28 @@ async def list_stories(db: DbSession) -> list[StorySummary]:
                 s.last_observed_at,
                 s.updated_at,
                 COUNT(e.id)::int AS evidence_count,
-                MAX(COALESCE(e.published_at, e.captured_at)) AS latest_evidence_at
+                MAX(COALESCE(e.published_at, e.captured_at)) AS latest_evidence_at,
+                hero.media_asset_id AS hero_media_asset_id,
+                hero.image_url AS hero_image_url
             FROM stories s
+            LEFT JOIN LATERAL (
+                SELECT
+                    ma.id AS media_asset_id,
+                    ma.original_url AS image_url
+                FROM story_media_candidates smc
+                JOIN media_assets ma ON ma.id = smc.media_asset_id
+                WHERE smc.story_id = s.id
+                  AND smc.story_role = 'hero'
+                ORDER BY
+                    smc.selected DESC,
+                    smc.manual_override DESC,
+                    smc.confidence DESC,
+                    ma.created_at
+                LIMIT 1
+            ) hero ON true
             LEFT JOIN evidence e ON e.story_id = s.id
             WHERE s.merged_into_story_id IS NULL
-            GROUP BY s.id
+            GROUP BY s.id, hero.media_asset_id, hero.image_url
             ORDER BY COALESCE(
                 s.last_published_at,
                 s.last_observed_at,
@@ -208,9 +226,49 @@ async def get_story(slug: str, db: DbSession) -> StoryDetail:
             )
         )
 
+    media_result = await db.execute(
+        text(
+            """
+            SELECT
+                ma.id AS media_asset_id,
+                smc.story_role,
+                ma.content_role,
+                ma.original_url AS url,
+                ma.caption,
+                ma.source_provider,
+                ma.origin_provider,
+                ma.photographer,
+                ma.agency,
+                ma.rights_status,
+                ma.storage_policy,
+                smc.match_reason,
+                smc.confidence,
+                smc.selected
+            FROM story_media_candidates smc
+            JOIN media_assets ma ON ma.id = smc.media_asset_id
+            WHERE smc.story_id = :story_id
+            ORDER BY
+                smc.selected DESC,
+                CASE smc.story_role
+                    WHEN 'hero' THEN 0
+                    WHEN 'thumbnail' THEN 1
+                    ELSE 2
+                END,
+                smc.confidence DESC,
+                ma.created_at
+            """
+        ),
+        {"story_id": story["id"]},
+    )
+    media_items = [
+        StoryMediaCandidate(**dict(row))
+        for row in media_result.mappings().all()
+    ]
+
     return StoryDetail(
         **dict(story),
         entities=entity_items,
         sources=source_items,
         evidence=evidence_items,
+        media=media_items,
     )

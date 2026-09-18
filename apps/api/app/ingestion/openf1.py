@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
 
-from app.ingestion.openf1_telemetry import parse_laps, parse_positions, parse_stints
+from app.ingestion.openf1_telemetry import parse_laps, parse_locations, parse_positions, parse_stints
 
 OPENF1_BASE_URL = "https://api.openf1.org/v1"
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
@@ -213,3 +213,47 @@ class OpenF1Client:
 
     async def positions(self, session_key: int):
         return parse_positions(await self._get("position", session_key=session_key))
+
+    async def locations(
+        self,
+        session_key: int,
+        *,
+        date_start: datetime | None = None,
+        date_end: datetime | None = None,
+        sample_interval_ms: int = 1000,
+        chunk_minutes: int = 15,
+    ):
+        if date_start is None or date_end is None or date_end <= date_start:
+            return parse_locations(
+                await self._get("location", session_key=session_key),
+                sample_interval_ms=sample_interval_ms,
+            )
+
+        sampled = []
+        last_seen: dict[int, datetime] = {}
+        minimum_delta = max(0, sample_interval_ms) / 1000
+        cursor = date_start
+        chunk = timedelta(minutes=max(1, chunk_minutes))
+        while cursor < date_end:
+            stop = min(cursor + chunk, date_end)
+            payload = await self._get(
+                "location",
+                session_key=session_key,
+                **{
+                    "date>=": cursor.isoformat(),
+                    "date<": stop.isoformat(),
+                },
+            )
+            locations = parse_locations(payload, sample_interval_ms=0)
+            for item in locations:
+                previous = last_seen.get(item.driver_number)
+                if (
+                    previous is None
+                    or minimum_delta <= 0
+                    or (item.observed_at - previous).total_seconds()
+                    >= minimum_delta
+                ):
+                    sampled.append(item)
+                    last_seen[item.driver_number] = item.observed_at
+            cursor = stop
+        return sampled

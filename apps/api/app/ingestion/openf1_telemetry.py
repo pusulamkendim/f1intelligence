@@ -53,6 +53,17 @@ class OpenF1Position:
     raw_payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class OpenF1Location:
+    session_key: int
+    driver_number: int
+    observed_at: datetime
+    x: int
+    y: int
+    z: int
+    raw_payload: dict[str, Any]
+
+
 def parse_laps(payload: list[dict[str, Any]]) -> list[OpenF1Lap]:
     parsed: list[OpenF1Lap] = []
     for row in payload:
@@ -90,3 +101,55 @@ def parse_positions(payload: list[dict[str, Any]]) -> list[OpenF1Position]:
             continue
         parsed.append(OpenF1Position(session_key=int(row["session_key"]), driver_number=int(row["driver_number"]), observed_at=observed_at, position=int(row["position"]), raw_payload=row))
     return parsed
+
+
+
+def parse_locations(
+    payload: list[dict[str, Any]],
+    *,
+    sample_interval_ms: int = 1000,
+) -> list[OpenF1Location]:
+    candidates: list[OpenF1Location] = []
+    for row in payload:
+        observed_at = _dt(row.get("date"))
+        if (
+            row.get("driver_number") is None
+            or row.get("x") is None
+            or row.get("y") is None
+            or row.get("z") is None
+            or observed_at is None
+        ):
+            continue
+        candidates.append(
+            OpenF1Location(
+                session_key=int(row["session_key"]),
+                driver_number=int(row["driver_number"]),
+                observed_at=observed_at,
+                x=int(row["x"]),
+                y=int(row["y"]),
+                z=int(row["z"]),
+                raw_payload=row,
+            )
+        )
+
+    if sample_interval_ms <= 0:
+        return sorted(
+            candidates,
+            key=lambda item: (item.driver_number, item.observed_at),
+        )
+
+    minimum_delta = sample_interval_ms / 1000
+    sampled: list[OpenF1Location] = []
+    last_seen: dict[int, datetime] = {}
+    for item in sorted(
+        candidates,
+        key=lambda row: (row.driver_number, row.observed_at),
+    ):
+        previous = last_seen.get(item.driver_number)
+        if (
+            previous is None
+            or (item.observed_at - previous).total_seconds() >= minimum_delta
+        ):
+            sampled.append(item)
+            last_seen[item.driver_number] = item.observed_at
+    return sampled

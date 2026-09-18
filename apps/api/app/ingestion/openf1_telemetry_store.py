@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ingestion.openf1_telemetry import OpenF1Lap, OpenF1Position, OpenF1Stint
+from app.ingestion.openf1_telemetry import OpenF1Lap, OpenF1Location, OpenF1Position, OpenF1Stint
 
 PROVIDER = "openf1"
 
@@ -41,4 +41,116 @@ async def upsert_positions(session: AsyncSession, *, session_id: Any, session_ke
     fetched_at = datetime.now(UTC)
     for row in rows:
         await session.execute(text("""INSERT INTO session_positions (session_id,driver_entity_id,provider,provider_session_key,provider_driver_number,observed_at,position,source_url,source_timestamp,fetched_at,raw_payload) VALUES (:session_id,:driver_entity_id,:provider,:session_key,:driver_number,:observed_at,:position,:source_url,:observed_at,:fetched_at,CAST(:raw_payload AS jsonb)) ON CONFLICT (provider,provider_session_key,provider_driver_number,observed_at) DO UPDATE SET driver_entity_id=EXCLUDED.driver_entity_id,position=EXCLUDED.position,fetched_at=EXCLUDED.fetched_at,raw_payload=EXCLUDED.raw_payload"""), {"session_id": session_id, "driver_entity_id": drivers.get(row.driver_number), "provider": PROVIDER, "session_key": session_key, "driver_number": row.driver_number, "observed_at": row.observed_at, "position": row.position, "source_url": f"https://api.openf1.org/v1/position?session_key={session_key}", "fetched_at": fetched_at, "raw_payload": json.dumps(row.raw_payload)})
+    return len(rows)
+
+
+
+async def location_loaded_session_keys(
+    session: AsyncSession,
+    season: int,
+) -> set[int]:
+    result = await session.execute(
+        text(
+            """
+            SELECT DISTINCT rs.provider_session_id
+            FROM race_sessions rs
+            JOIN races r ON r.id = rs.race_id
+            WHERE r.season = :season
+              AND rs.provider = :provider
+              AND EXISTS (
+                  SELECT 1
+                  FROM session_locations location
+                  WHERE location.session_id = rs.id
+              )
+            """
+        ),
+        {"season": season, "provider": PROVIDER},
+    )
+    return {int(value) for value in result.scalars().all()}
+
+
+async def upsert_locations(
+    session: AsyncSession,
+    *,
+    session_id: Any,
+    session_key: int,
+    rows: list[OpenF1Location],
+    drivers: dict[int, Any | None],
+    batch_size: int = 5000,
+) -> int:
+    if not rows:
+        return 0
+
+    fetched_at = datetime.now(UTC)
+    statement = text(
+        """
+        INSERT INTO session_locations (
+            session_id,
+            driver_entity_id,
+            provider,
+            provider_session_key,
+            provider_driver_number,
+            observed_at,
+            x,
+            y,
+            z,
+            source_url,
+            source_timestamp,
+            fetched_at,
+            raw_payload
+        )
+        VALUES (
+            :session_id,
+            :driver_entity_id,
+            :provider,
+            :session_key,
+            :driver_number,
+            :observed_at,
+            :x,
+            :y,
+            :z,
+            :source_url,
+            :observed_at,
+            :fetched_at,
+            CAST(:raw_payload AS jsonb)
+        )
+        ON CONFLICT (
+            provider,
+            provider_session_key,
+            provider_driver_number,
+            observed_at
+        )
+        DO UPDATE SET
+            driver_entity_id = EXCLUDED.driver_entity_id,
+            x = EXCLUDED.x,
+            y = EXCLUDED.y,
+            z = EXCLUDED.z,
+            fetched_at = EXCLUDED.fetched_at,
+            raw_payload = EXCLUDED.raw_payload
+        """
+    )
+
+    params = [
+        {
+            "session_id": session_id,
+            "driver_entity_id": drivers.get(row.driver_number),
+            "provider": PROVIDER,
+            "session_key": session_key,
+            "driver_number": row.driver_number,
+            "observed_at": row.observed_at,
+            "x": row.x,
+            "y": row.y,
+            "z": row.z,
+            "source_url": (
+                "https://api.openf1.org/v1/location"
+                f"?session_key={session_key}"
+            ),
+            "fetched_at": fetched_at,
+            "raw_payload": json.dumps(row.raw_payload),
+        }
+        for row in rows
+    ]
+
+    for start in range(0, len(params), batch_size):
+        await session.execute(statement, params[start : start + batch_size])
     return len(rows)

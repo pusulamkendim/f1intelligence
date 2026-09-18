@@ -193,6 +193,18 @@ class OpenF1Client:
         assert last_error is not None
         raise last_error
 
+    async def _get_optional(
+        self,
+        endpoint: str,
+        **params: Any,
+    ) -> list[dict[str, Any]]:
+        try:
+            return await self._get(endpoint, **params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return []
+            raise
+
     async def meetings(self, year: int):
         return parse_meetings(await self._get("meetings", year=year))
 

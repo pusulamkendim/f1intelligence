@@ -88,6 +88,7 @@ class StoryMaterializationBatchStats:
     singleton_stories: int = 0
     candidates_left: int = 0
     cleanup_changes: int = 0
+    fingerprint_story_merges: int = 0
     taxonomy_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -584,6 +585,83 @@ async def _merge_auto_stories(
         {"survivor": survivor, "loser": loser},
     )
     return survivor
+
+
+async def _converge_event_fingerprint_stories(
+    session: AsyncSession,
+) -> int:
+    result = await session.execute(
+        text(
+            """
+            SELECT
+                si.raw_metadata->>'event_fingerprint' AS fingerprint,
+                ARRAY_AGG(DISTINCT s.id) AS story_ids
+            FROM source_items si
+            JOIN story_source_items ssi
+              ON ssi.source_item_id = si.id
+            JOIN stories s
+              ON s.id = ssi.story_id
+            WHERE NULLIF(
+                    si.raw_metadata->>'event_fingerprint',
+                    ''
+                  ) IS NOT NULL
+              AND s.materialization_method = :method
+              AND s.merged_into_story_id IS NULL
+            GROUP BY si.raw_metadata->>'event_fingerprint'
+            HAVING COUNT(DISTINCT s.id) > 1
+            """
+        ),
+        {"method": MATERIALIZATION_METHOD},
+    )
+
+    merges = 0
+    for row in result.mappings().all():
+        fingerprint = row["fingerprint"]
+        story_ids = list(row["story_ids"] or [])
+        if len(story_ids) < 2:
+            continue
+
+        survivor = story_ids[0]
+        for story_id in story_ids[1:]:
+            merged = await _merge_auto_stories(
+                session,
+                survivor,
+                story_id,
+            )
+            if merged is None:
+                continue
+            survivor = merged
+            merges += 1
+
+        await session.execute(
+            text(
+                """
+                UPDATE source_item_cluster_candidates c
+                SET
+                    status = 'accepted',
+                    reasons = reasons || jsonb_build_object(
+                        'accepted_by',
+                        'event_fingerprint_convergence_v1'
+                    ),
+                    updated_at = now()
+                FROM source_items left_item,
+                     source_items right_item
+                WHERE c.status = 'candidate'
+                  AND c.method = 'event_fingerprint_v3'
+                  AND left_item.id = c.left_source_item_id
+                  AND right_item.id = c.right_source_item_id
+                  AND left_item.raw_metadata->>'event_fingerprint'
+                      = :fingerprint
+                  AND right_item.raw_metadata->>'event_fingerprint'
+                      = :fingerprint
+                """
+            ),
+            {"fingerprint": fingerprint},
+        )
+        await refresh_story_aggregate(session, survivor)
+        await refresh_story_media_from_sources(session, survivor)
+
+    return merges
 
 
 async def _create_story(
@@ -1110,6 +1188,9 @@ async def materialize_existing_source_items(
         if materialized.action != "skipped":
             story_worthy += 1
 
+    fingerprint_story_merges = await _converge_event_fingerprint_stories(
+        session
+    )
     canonical, multi, singleton, candidates_left = await _story_audit_counts(session)
     return StoryMaterializationBatchStats(
         processed=len(rows),
@@ -1120,6 +1201,7 @@ async def materialize_existing_source_items(
         singleton_stories=singleton,
         candidates_left=candidates_left,
         cleanup_changes=cleanup_changes,
+        fingerprint_story_merges=fingerprint_story_merges,
         taxonomy_counts=taxonomy_counts,
         **counts,
     )

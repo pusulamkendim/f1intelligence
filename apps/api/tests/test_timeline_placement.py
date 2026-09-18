@@ -209,6 +209,8 @@ def _race_candidate(
     anchor_at: datetime,
     confidence: int,
     matched_alias: str,
+    alias_type: str = "race_name",
+    detected_in: tuple[str, ...] = ("title",),
 ) -> dict:
     return {
         "id": uuid4(),
@@ -220,6 +222,9 @@ def _race_candidate(
         "relation_type": "context",
         "confidence": confidence,
         "matched_alias": matched_alias,
+        "alias_type": alias_type,
+        "detected_in": detected_in,
+        "evidence_confidence": confidence,
     }
 
 
@@ -382,3 +387,116 @@ def test_non_f1_year_context_beats_aggregate_f1_year_phrase() -> None:
     )
 
     assert explicit_f1_season(value) is None
+
+
+
+def test_preview_language_is_scheduled_even_when_observed_after_race() -> None:
+    placement = infer_story_coordinate(
+        text_value="Italian Grand Prix: Race Preview",
+        taxonomy="sporting",
+        reported_at=datetime(2026, 9, 18, tzinfo=UTC),
+        race_season=2025,
+        race_anchor_at=datetime(2025, 9, 7, 13, tzinfo=UTC),
+    )
+
+    assert placement.precision == "race"
+    assert placement.temporal_relation == "scheduled_for"
+
+
+def test_venue_only_showrun_is_not_primary_race_anchor() -> None:
+    selected = _select_story_race(
+        [
+            _race_candidate(
+                "2025-hungarian-grand-prix",
+                season=2025,
+                round_number=14,
+                anchor_at=datetime(2025, 8, 3, 13, tzinfo=UTC),
+                confidence=89,
+                matched_alias="Budapest",
+                alias_type="venue",
+                detected_in=("title",),
+            )
+        ],
+        text_value="Budapest Showrun Art",
+        title_value="Budapest Showrun Art",
+        reported_at=datetime(2025, 7, 30, tzinfo=UTC),
+    )
+
+    assert selected is None
+
+
+def test_venue_only_background_evidence_is_not_primary_race_anchor() -> None:
+    selected = _select_story_race(
+        [
+            _race_candidate(
+                "2026-british-grand-prix",
+                season=2026,
+                round_number=9,
+                anchor_at=datetime(2026, 7, 5, 14, tzinfo=UTC),
+                confidence=85,
+                matched_alias="Silverstone",
+                alias_type="venue",
+                detected_in=("summary",),
+            )
+        ],
+        text_value=(
+            "Best Seats in the House presents Max vs 100 "
+            "at Silverstone"
+        ),
+        title_value="Best Seats in the House presents Max vs 100",
+        reported_at=datetime(2026, 7, 4, tzinfo=UTC),
+    )
+
+    assert selected is None
+
+
+def test_venue_title_with_preview_semantics_can_anchor_race() -> None:
+    madrid = _race_candidate(
+        "2026-madrid-grand-prix",
+        season=2026,
+        round_number=14,
+        anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+        confidence=92,
+        matched_alias="Madring",
+        alias_type="venue",
+        detected_in=("title",),
+    )
+
+    selected = _select_story_race(
+        [madrid],
+        text_value="What to expect at the Madring",
+        title_value="What to expect at the Madring",
+        reported_at=datetime(2026, 9, 12, tzinfo=UTC),
+    )
+
+    assert selected is not None
+    assert selected["slug"] == "2026-madrid-grand-prix"
+
+
+def test_race_name_in_standfirst_remains_eligible_context() -> None:
+    baku = _race_candidate(
+        "2026-azerbaijan-grand-prix",
+        season=2026,
+        round_number=15,
+        anchor_at=datetime(2026, 9, 26, 11, tzinfo=UTC),
+        confidence=100,
+        matched_alias="Azerbaijan Grand Prix",
+        alias_type="race_name",
+        detected_in=("standfirst",),
+    )
+
+    selected = _select_story_race(
+        [baku],
+        text_value=(
+            "Lewis Hamilton denies claims he is pushing Ferrari "
+            "to replace key staff. Speaking at the Azerbaijan Grand Prix..."
+        ),
+        title_value=(
+            "Lewis Hamilton denies claims he is pushing Ferrari "
+            "to replace key staff"
+        ),
+        reported_at=datetime(2026, 9, 25, tzinfo=UTC),
+    )
+
+    assert selected is not None
+    assert selected["slug"] == "2026-azerbaijan-grand-prix"

@@ -28,11 +28,158 @@ class DriverPortraitRow:
 
 
 @dataclass(frozen=True)
+class CuratedDriverPortrait:
+    person_slug: str
+    source_provider: str
+    source_page_url: str
+    image_url: str
+    portrait_variant: str
+    caption: str
+    preferred_for: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GroupPhotoSeed:
     source_asset_id: str
     page_url: str
     image_url: str
     caption: str
+
+
+CURATED_DRIVER_PORTRAITS: tuple[CuratedDriverPortrait, ...] = (
+    CuratedDriverPortrait(
+        person_slug="lando-norris",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/lando-norris",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "mclaren/lannor01/2026mclarenlannor01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Lando Norris — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="oscar-piastri",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/oscar-piastri",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "mclaren/oscpia01/2026mclarenoscpia01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Oscar Piastri — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="max-verstappen",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/max-verstappen",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "redbullracing/maxver01/2026redbullracingmaxver01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Max Verstappen — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="isack-hadjar",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/isack-hadjar",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "redbullracing/isahad01/2026redbullracingisahad01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Isack Hadjar — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="george-russell",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/george-russell",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "mercedes/georus01/2026mercedesgeorus01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="George Russell — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="kimi-antonelli",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/kimi-antonelli",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "mercedes/andant01/2026mercedesandant01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Kimi Antonelli — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="lewis-hamilton",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/lewis-hamilton",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "ferrari/lewham01/2026ferrarilewham01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Lewis Hamilton — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="charles-leclerc",
+        source_provider="formula1.com",
+        source_page_url="https://www.formula1.com/en/drivers/charles-leclerc",
+        image_url=(
+            "https://media.formula1.com/image/upload/"
+            "c_fill,w_720/q_auto/v1740000001/common/f1/2026/"
+            "ferrari/chalec01/2026ferrarichalec01right.webp"
+        ),
+        portrait_variant="primary_icon",
+        caption="Charles Leclerc — 2026 Formula 1 official driver portrait",
+        preferred_for=("charts", "driver_card", "standings"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="lando-norris",
+        source_provider="mclaren.com",
+        source_page_url="https://www.mclaren.com/racing/team/lando-norris/",
+        image_url=(
+            "https://images.ctfassets.net/gy95mqeyjg28/"
+            "2gtUGEfRaDDXILBqVSIj4Q/"
+            "c57799cbb8b458aca1b953dc5d1703cc/"
+            "launch_2026_lando_desktop.jpg?fm=webp&q=75&w=3840"
+        ),
+        portrait_variant="studio_full_body",
+        caption="Lando Norris in 2026 McLaren overalls",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+    CuratedDriverPortrait(
+        person_slug="oscar-piastri",
+        source_provider="mclaren.com",
+        source_page_url="https://www.mclaren.com/racing/team/oscar-piastri/",
+        image_url=(
+            "https://images.ctfassets.net/gy95mqeyjg28/"
+            "5eFFdEkNfSJRI8fjAmk1IX/"
+            "6463449c24e60400e609c14b95bdb37d/"
+            "launch_2026_oscar_desktop.jpg?fm=webp&q=75&w=3840"
+        ),
+        portrait_variant="studio_full_body",
+        caption="Oscar Piastri in 2026 McLaren overalls",
+        preferred_for=("driver_card", "feature_graphic"),
+    ),
+)
 
 
 GROUP_PHOTOS: tuple[GroupPhotoSeed, ...] = (
@@ -60,6 +207,8 @@ class DriverMediaStats:
     headshots_found: int = 0
     portraits_persisted: int = 0
     portrait_entity_links: int = 0
+    curated_portraits_persisted: int = 0
+    curated_portrait_entity_links: int = 0
     group_photos_persisted: int = 0
     group_photo_entity_links: int = 0
     failures: int = 0
@@ -162,6 +311,47 @@ async def _persist_portrait(
     return True
 
 
+async def _persist_curated_portrait(
+    session,
+    *,
+    seed: CuratedDriverPortrait,
+    row: DriverPortraitRow,
+    season: int,
+) -> None:
+    asset_id = await upsert_media_asset(
+        session,
+        MediaAssetInput(
+            source_provider=seed.source_provider,
+            discovered_via=seed.source_provider,
+            original_url=seed.image_url,
+            discovery_page_url=seed.source_page_url,
+            caption=seed.caption,
+            alt_text=seed.caption,
+            content_role="driver_portrait",
+            season=season,
+            rights_evidence_url=seed.source_page_url,
+            metadata={
+                "media_kind": "curated_driver_portrait",
+                "portrait_variant": seed.portrait_variant,
+                "person_slug": row.person_slug,
+                "driver_name": row.display_name,
+                "team_name": row.team_name,
+                "season": season,
+                "preferred_for": list(seed.preferred_for),
+                "curated": True,
+            },
+        ),
+    )
+    await link_media_asset_entity(
+        session,
+        media_asset_id=asset_id,
+        entity_id=row.entity_id,
+        relation_type="depicted",
+        confidence=100,
+        match_method="curated_driver_portrait_v1",
+    )
+
+
 async def _persist_group_photo(
     session,
     *,
@@ -231,6 +421,26 @@ async def ingest_driver_media(*, season: int = 2026) -> DriverMediaStats:
                 if persisted:
                     stats.portraits_persisted += 1
                     stats.portrait_entity_links += 1
+
+            rows_by_slug = {row.person_slug: row for row in rows}
+            for seed in CURATED_DRIVER_PORTRAITS:
+                row = rows_by_slug.get(seed.person_slug)
+                if row is None:
+                    stats.failures += 1
+                    continue
+                try:
+                    async with session.begin_nested():
+                        await _persist_curated_portrait(
+                            session,
+                            seed=seed,
+                            row=row,
+                            season=season,
+                        )
+                except Exception:
+                    stats.failures += 1
+                    continue
+                stats.curated_portraits_persisted += 1
+                stats.curated_portrait_entity_links += 1
 
             if driver_entity_ids:
                 for seed in GROUP_PHOTOS:

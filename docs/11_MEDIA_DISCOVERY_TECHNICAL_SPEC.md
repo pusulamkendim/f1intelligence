@@ -1050,3 +1050,39 @@ Implementation should be checked against the current official documentation befo
 - Commons credit-line guidance: `https://commons.wikimedia.org/wiki/Commons:Credit_line`
 
 The provider adapter should isolate API-shape changes so the rest of the product does not depend directly on Wikimedia-specific fields.
+
+
+---
+
+# 24. Additional discovery provider: F1-Fansite
+
+The production discovery architecture is no longer Commons-only.
+
+F1-Fansite is a metadata-only discovery adapter:
+
+```text
+F1-Fansite wallpaper index
+        ↓
+gallery discovery
+        ↓
+image URL + caption + alt text
+        ↓
+photographer / agency / origin asset ID extraction
+        ↓
+canonical entity classification
+        ↓
+story-media candidate matching
+```
+
+Hard rules:
+
+- never treat F1-Fansite visibility as reuse permission;
+- default to `rights_status=restricted` and `storage_policy=metadata_only`;
+- do not download discovered binaries into R2 in this phase;
+- preserve `discovery_page_url` and rights-evidence URL;
+- resolve Getty/LAT/Sutton/DPPI/Red Bull Content Pool metadata as origin lineage, not as an automatic licence;
+- candidate ranking may use race/driver/team overlap, but rights state remains an independent gate.
+
+The same normalized media registry accepts source-article hero images captured during story ingestion. This means a Story can have useful image candidates before the richer Commons/stock approval workflow is implemented.
+
+The command `make ingest-media` runs F1-Fansite discovery independently of Story materialization. Network discovery is intentionally not hidden inside the database materialization transaction.

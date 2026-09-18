@@ -370,6 +370,50 @@ async def copy_source_entities_to_media(
     )
 
 
+async def link_media_asset_entity(
+    session: AsyncSession,
+    *,
+    media_asset_id: UUID,
+    entity_id: UUID,
+    relation_type: str = "depicted",
+    confidence: int = 100,
+    match_method: str = "manual",
+) -> None:
+    await session.execute(
+        text(
+            """
+            INSERT INTO media_asset_entities (
+                media_asset_id,
+                entity_id,
+                relation_type,
+                confidence,
+                match_method
+            ) VALUES (
+                :media_asset_id,
+                :entity_id,
+                :relation_type,
+                :confidence,
+                :match_method
+            )
+            ON CONFLICT (media_asset_id, entity_id) DO UPDATE SET
+                relation_type = EXCLUDED.relation_type,
+                confidence = GREATEST(
+                    media_asset_entities.confidence,
+                    EXCLUDED.confidence
+                ),
+                match_method = EXCLUDED.match_method
+            """
+        ),
+        {
+            "media_asset_id": media_asset_id,
+            "entity_id": entity_id,
+            "relation_type": relation_type,
+            "confidence": max(0, min(confidence, 100)),
+            "match_method": match_method,
+        },
+    )
+
+
 async def reconcile_media_entities(
     session: AsyncSession,
     *,

@@ -128,3 +128,62 @@ def test_mclaren_portraits_remain_metadata_only() -> None:
     assert policy.source_role == "discovery"
     assert policy.storage_policy == "metadata_only"
     assert policy.rights_status == "restricted"
+
+
+
+def test_curated_portrait_pack_has_two_assets_per_driver() -> None:
+    expected = {
+        "lando-norris",
+        "oscar-piastri",
+        "max-verstappen",
+        "isack-hadjar",
+        "george-russell",
+        "kimi-antonelli",
+        "lewis-hamilton",
+        "charles-leclerc",
+    }
+    assert len(CURATED_DRIVER_PORTRAITS) == 16
+    counts = {
+        slug: sum(
+            1 for item in CURATED_DRIVER_PORTRAITS if item.person_slug == slug
+        )
+        for slug in expected
+    }
+    assert counts == {slug: 2 for slug in expected}
+
+
+def test_red_bull_team_portraits_are_official_team_assets() -> None:
+    portraits = [
+        item
+        for item in CURATED_DRIVER_PORTRAITS
+        if item.portrait_variant == "studio_upper_body"
+    ]
+    assert {item.person_slug for item in portraits} == {
+        "max-verstappen",
+        "isack-hadjar",
+    }
+    assert all(item.source_provider == "redbullracing.com" for item in portraits)
+    assert all("/_next/image?" in item.image_url for item in portraits)
+
+
+def test_mercedes_and_ferrari_secondary_portraits_are_high_resolution_f1_assets() -> None:
+    portraits = [
+        item
+        for item in CURATED_DRIVER_PORTRAITS
+        if item.portrait_variant == "contextual_portrait"
+    ]
+    assert {item.person_slug for item in portraits} == {
+        "george-russell",
+        "kimi-antonelli",
+        "lewis-hamilton",
+        "charles-leclerc",
+    }
+    assert all(item.source_provider == "formula1.com" for item in portraits)
+    assert all("w_3200" in item.image_url for item in portraits)
+
+
+def test_red_bull_portraits_remain_metadata_only() -> None:
+    policy = policy_for_provider("redbullracing.com")
+    assert policy.source_role == "discovery"
+    assert policy.storage_policy == "metadata_only"
+    assert policy.rights_status == "restricted"

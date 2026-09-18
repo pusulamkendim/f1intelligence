@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
@@ -127,3 +129,56 @@ async def test_client_retries_429_using_retry_after(monkeypatch: pytest.MonkeyPa
         assert await client.sessions(2026) == []
 
     assert calls == 2
+
+
+
+@pytest.mark.asyncio
+async def test_location_client_chunks_large_session_windows() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            payload = [
+                {
+                    "session_key": 999,
+                    "driver_number": 1,
+                    "date": "2026-09-18T12:00:00Z",
+                    "x": 100,
+                    "y": 200,
+                    "z": 10,
+                }
+            ]
+        else:
+            payload = [
+                {
+                    "session_key": 999,
+                    "driver_number": 1,
+                    "date": "2026-09-18T12:15:00Z",
+                    "x": 300,
+                    "y": 400,
+                    "z": 20,
+                }
+            ]
+        return httpx.Response(200, json=payload, request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenF1Client(
+            http_client,
+            base_url="https://openf1.test/v1",
+            min_interval_seconds=0,
+        )
+        rows = await client.locations(
+            999,
+            date_start=datetime(2026, 9, 18, 12, 0, tzinfo=UTC),
+            date_end=datetime(2026, 9, 18, 12, 20, tzinfo=UTC),
+            sample_interval_ms=1000,
+            chunk_minutes=15,
+        )
+
+    assert len(calls) == 2
+    assert "date%3E%3D=" in calls[0]
+    assert "date%3C=" in calls[0]
+    assert [(row.x, row.y) for row in rows] == [(100, 200), (300, 400)]

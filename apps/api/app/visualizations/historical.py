@@ -145,6 +145,9 @@ async def race_classification(
                         "fastest_lap_rank": row["fastest_lap_rank"],
                         "fastest_lap_number": row["fastest_lap_number"],
                         "fastest_lap_time": row["fastest_lap_time"],
+                        "fastest_lap_token": "timing-purple"
+                        if row["fastest_lap_rank"] == 1
+                        else None,
                     }
                 ],
             }

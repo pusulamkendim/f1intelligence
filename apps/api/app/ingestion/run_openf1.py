@@ -217,12 +217,35 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                 date_end=location_end,
                 sample_interval_ms=1000,
             )
+            drivers = await client.drivers(item.session_key)
             async with SessionLocal() as db:
                 async with db.begin():
-                    driver_map = await driver_entity_map(
+                    mappings, unresolved = await replace_session_entries(
                         db,
-                        session_ids[item.session_key],
+                        season=season,
+                        session_id=session_ids[item.session_key],
+                        drivers=drivers,
                     )
+                    if unresolved:
+                        canonicalized_driver_names += (
+                            await reconcile_unresolved_session_drivers(
+                                db,
+                                season,
+                            )
+                        )
+                        mappings, unresolved = await replace_session_entries(
+                            db,
+                            season=season,
+                            session_id=session_ids[item.session_key],
+                            drivers=drivers,
+                        )
+                    driver_map = {
+                        driver_number: driver_entity_id
+                        for driver_number, (
+                            driver_entity_id,
+                            _team_entity_id,
+                        ) in mappings.items()
+                    }
                     location_count = await upsert_locations(
                         db,
                         session_id=session_ids[item.session_key],
@@ -241,6 +264,8 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
                             "session_code": item.session_code,
                             "sample_interval_ms": 1000,
                             "provider_sample_rate_hz_approx": 3.7,
+                            "drivers": len(drivers),
+                            "unresolved_entries": unresolved,
                         },
                     )
             location_summary.append(

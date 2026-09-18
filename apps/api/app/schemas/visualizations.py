@@ -17,6 +17,8 @@ RenderPreset = Literal[
     "starting-grid",
     "championship-standings",
     "driver-season-results",
+    "race-classification",
+    "qualifying-classification",
 ]
 
 

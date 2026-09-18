@@ -8,6 +8,18 @@ from urllib.parse import urljoin, urlparse
 from app.ingestion.media_assets import infer_content_role
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+_DERIVATIVE_SIZE_RE = re.compile(r"-(\d{2,4})x(\d{2,4})(?=\.[a-z0-9]+$)", re.IGNORECASE)
+_LOW_VALUE_PATH_MARKERS = (
+    "affiliate",
+    "banner",
+    "advert",
+    "launch_refresh",
+    "launch-refresh",
+    "thumbnail",
+    "-thumb",
+    "-small",
+    "_small",
+)
 
 
 @dataclass(frozen=True)
@@ -98,8 +110,10 @@ class _GalleryParser(HTMLParser):
             self._caption_parts = []
         elif lower == "a" and self._in_figure:
             href = values.get("href")
-            if href and _looks_like_image(href):
-                self._figure_href = urljoin(self.gallery_url, href)
+            if href:
+                absolute = urljoin(self.gallery_url, href)
+                if _is_gallery_asset(absolute):
+                    self._figure_href = absolute
         elif lower == "img":
             src = (
                 values.get("data-full-url")
@@ -107,9 +121,11 @@ class _GalleryParser(HTMLParser):
                 or values.get("data-lazy-src")
                 or values.get("src")
             )
-            if not src or not _looks_like_image(src):
+            if not src:
                 return
             absolute = urljoin(self.gallery_url, src)
+            if not _is_gallery_asset(absolute):
+                return
             alt = values.get("alt")
             if self._in_figure:
                 self._figure_src = absolute
@@ -145,6 +161,25 @@ class _GalleryParser(HTMLParser):
 def _looks_like_image(url: str) -> bool:
     clean = url.lower().split("?", 1)[0]
     return clean.endswith(IMAGE_EXTENSIONS)
+
+
+def _is_gallery_asset(url: str) -> bool:
+    """Keep full gallery photos while rejecting page chrome, ads and small derivatives."""
+    if not _looks_like_image(url):
+        return False
+    path = urlparse(url).path.casefold()
+    filename = path.rsplit("/", 1)[-1]
+    if any(marker in filename for marker in _LOW_VALUE_PATH_MARKERS):
+        return False
+    if "header" in filename:
+        return False
+
+    size_match = _DERIVATIVE_SIZE_RE.search(filename)
+    if size_match:
+        width, height = (int(value) for value in size_match.groups())
+        if width * height < 600_000 or width / max(height, 1) >= 3:
+            return False
+    return True
 
 
 def _origin_metadata(

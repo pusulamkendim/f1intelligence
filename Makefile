@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources ingest-media materialize-stories materialize-timeline list-sources ingest-jolpica ingest-jolpica-history ingest-openf1 api-dev api-test web-dev web-build
+.PHONY: setup infra-up infra-down seed-demo ingestion-setup ingestion-migrate ingest-fia ingest-fia-docs ingest-formula1 ingest-sources ingest-media ingest-driver-media materialize-stories materialize-timeline list-sources ingest-jolpica ingest-jolpica-history ingest-openf1 api-dev api-test web-dev web-build
 
 setup:
 	cp -n .env.example .env || true
@@ -51,7 +51,10 @@ ingest-sources: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_timeline_placements --limit $${TIMELINE_LIMIT:-500}
 
 ingest-media: ingestion-migrate
-	cd apps/api && uv run python -m app.ingestion.run_media_discovery --gallery-limit $${GALLERY_LIMIT:-3} --asset-limit $${ASSET_LIMIT:-100}
+	cd apps/api && uv run python -m app.ingestion.run_media_discovery $${MEDIA_SOURCE:+--source $$MEDIA_SOURCE} --page-limit $${GALLERY_LIMIT:-3} --asset-limit $${ASSET_LIMIT:-100}
+
+ingest-driver-media: ingestion-migrate
+	cd apps/api && uv run python -m app.ingestion.run_driver_media --season $${SEASON:-2026}
 
 materialize-stories: ingestion-migrate
 	cd apps/api && uv run python -m app.ingestion.run_story_materialization $${LIMIT:+--limit $$LIMIT}

@@ -389,11 +389,12 @@ async def reconcile_media_entities(
                 ) VALUES (
                     :media_asset_id,
                     :entity_id,
-                    'depicted',
+                    :relation_type,
                     :confidence,
                     :match_method
                 )
                 ON CONFLICT (media_asset_id, entity_id) DO UPDATE SET
+                    relation_type = EXCLUDED.relation_type,
                     confidence = GREATEST(
                         media_asset_entities.confidence,
                         EXCLUDED.confidence
@@ -404,8 +405,15 @@ async def reconcile_media_entities(
             {
                 "media_asset_id": media_asset_id,
                 "entity_id": item.entity_id,
+                "relation_type": (
+                    "context" if item.match_method == "source_context" else "depicted"
+                ),
                 "confidence": item.confidence,
-                "match_method": "caption_entity_match_v1",
+                "match_method": (
+                    "media_source_context_v1"
+                    if item.match_method == "source_context"
+                    else "caption_entity_match_v1"
+                ),
             },
         )
 
@@ -553,6 +561,12 @@ async def match_media_asset_to_stories(
               ON mae.media_asset_id = ma.id
             JOIN story_entities se
               ON se.entity_id = mae.entity_id
+             AND se.relation_type IN (
+                 'subject',
+                 'directly_involved',
+                 'affected',
+                 'context'
+             )
             JOIN entities e ON e.id = mae.entity_id
             JOIN stories s ON s.id = se.story_id
             WHERE ma.id = :media_asset_id

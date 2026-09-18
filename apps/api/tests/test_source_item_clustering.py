@@ -229,3 +229,24 @@ def test_near_match_outside_time_window_is_rejected() -> None:
         ),
     )
     assert score is None
+
+
+
+def test_named_event_fingerprint_survives_historical_replay_window() -> None:
+    now = datetime(2026, 9, 17, 12, tzinfo=UTC)
+    score = score_same_story(
+        _features(
+            "formula1.com",
+            "2027 Formula 1 race calendar confirmed",
+            published_at=now,
+        ),
+        _features(
+            "bbc.com",
+            "Formula 1 2027 calendar revealed",
+            published_at=now - timedelta(days=45),
+        ),
+    )
+
+    assert score is not None
+    assert score.method == "event_fingerprint_v3"
+    assert score.score == 96

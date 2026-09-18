@@ -89,3 +89,22 @@ def test_parsers_are_conservative() -> None:
     assert infer_lap_number("lap 14") == 14
     assert infer_stint_number("stint #3") == 3
     assert infer_lap_number("14 laps remaining") is None
+
+
+
+def test_future_regulation_season_overrides_current_race_context() -> None:
+    placement = infer_story_coordinate(
+        text_value=(
+            "FIA confirms a regulation change effective for the 2027 season "
+            "after discussions at the 2026 Singapore Grand Prix"
+        ),
+        taxonomy="regulation",
+        reported_at=datetime(2026, 9, 18, tzinfo=UTC),
+        race_season=2026,
+        race_anchor_at=datetime(2026, 10, 11, 12, tzinfo=UTC),
+    )
+
+    assert placement.season == 2027
+    assert placement.precision == "season"
+    assert placement.temporal_relation == "effective_from"
+    assert placement.reason == "explicit_future_effective_season"

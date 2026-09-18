@@ -16,8 +16,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        default=500,
-        help="maximum source items to evaluate in chronological order",
+        default=None,
+        help=(
+            "optional maximum source items to evaluate in chronological order; "
+            "omit for a full rematerialization"
+        ),
     )
     return parser.parse_args()
 
@@ -28,7 +31,7 @@ async def async_main() -> None:
         async with session.begin():
             stats = await materialize_existing_source_items(
                 session,
-                limit=max(1, args.limit),
+                limit=max(1, args.limit) if args.limit is not None else None,
             )
     print(json.dumps(asdict(stats), indent=2))
 

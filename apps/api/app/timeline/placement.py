@@ -121,7 +121,11 @@ def infer_story_coordinate(
     race_anchor_at: datetime | None,
 ) -> PlacementInference:
     stated_season = explicit_season(text_value)
-    season = race_season or stated_season or (reported_at.year if reported_at else datetime.now().year)
+    default_season = (
+        race_season
+        or stated_season
+        or (reported_at.year if reported_at else datetime.now().year)
+    )
     session_code = infer_session_code(text_value)
     lap_number = infer_lap_number(text_value)
     stint_number = infer_stint_number(text_value)
@@ -149,7 +153,13 @@ def infer_story_coordinate(
     else:
         temporal_relation = "reported_at"
 
-    if lap_number:
+    season = stated_season if future_season else default_season
+
+    if future_season and taxonomy == "regulation":
+        precision = "season"
+        confidence = 96
+        reason = "explicit_future_effective_season"
+    elif lap_number:
         precision = "lap"
         confidence = 98
         reason = "explicit_lap_reference"
@@ -391,6 +401,13 @@ async def refresh_story_timeline_placement(
     )
 
     race_id = race["id"] if race else None
+    if (
+        race is not None
+        and inference.precision == "season"
+        and inference.season != race["season"]
+    ):
+        race_id = None
+
     session_row = (
         await _session_for_code(session, race_id, inference.session_code)
         if race_id is not None

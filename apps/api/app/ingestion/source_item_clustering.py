@@ -207,14 +207,14 @@ def score_same_story(
             method="exact_title_v3",
             reasons=reasons,
         )
-    if time_close is False:
-        return None
     if shared_event:
         return SameStoryScore(
             score=_event_score(shared_event),
             method="event_fingerprint_v3",
             reasons=reasons,
         )
+    if time_close is False:
+        return None
 
     if len(shared_strong) >= 2:
         threshold = 0.20 if time_close is True else 0.40
@@ -272,9 +272,60 @@ async def refresh_cluster_candidates(
         ),
         {"source_item_id": source_item_id},
     )
+    await session.execute(
+        text(
+            """
+            UPDATE source_items
+            SET raw_metadata = raw_metadata || jsonb_strip_nulls(
+                jsonb_build_object(
+                    'event_fingerprint',
+                    CAST(:event_fingerprint AS text)
+                )
+            )
+            WHERE id = :source_item_id
+            """
+        ),
+        {
+            "source_item_id": source_item_id,
+            "event_fingerprint": features.event_fingerprint,
+        },
+    )
+
     result = await session.execute(
         text(
             """
+            WITH candidate_ids AS (
+                (
+                    SELECT id
+                    FROM source_items
+                    WHERE id <> :source_item_id
+                      AND provider <> :provider
+                      AND fetched_at >= now() - interval '14 days'
+                    ORDER BY fetched_at DESC
+                    LIMIT 200
+                )
+                UNION
+                SELECT id
+                FROM source_items
+                WHERE id <> :source_item_id
+                  AND provider <> :provider
+                  AND :event_fingerprint IS NOT NULL
+                  AND raw_metadata->>'event_fingerprint' = :event_fingerprint
+                UNION
+                SELECT id
+                FROM source_items
+                WHERE id <> :source_item_id
+                  AND provider <> :provider
+                  AND lower(
+                        COALESCE(
+                            NULLIF(
+                                raw_metadata->>'classification_title',
+                                ''
+                            ),
+                            title
+                        )
+                      ) = lower(:title)
+            )
             SELECT
                 si.id,
                 si.provider,
@@ -285,7 +336,10 @@ async def refresh_cluster_candidates(
                 si.published_at,
                 ARRAY_REMOVE(
                     ARRAY_AGG(DISTINCT CASE
-                        WHEN sie.relation_type IN ('subject', 'directly_involved')
+                        WHEN sie.relation_type IN (
+                            'subject',
+                            'directly_involved'
+                        )
                         THEN sie.entity_id
                     END),
                     NULL
@@ -298,18 +352,21 @@ async def refresh_cluster_candidates(
                     END),
                     NULL
                 ) AS race_entity_ids
-            FROM source_items si
-            LEFT JOIN source_item_entities sie ON sie.source_item_id = si.id
+            FROM candidate_ids ci
+            JOIN source_items si ON si.id = ci.id
+            LEFT JOIN source_item_entities sie
+              ON sie.source_item_id = si.id
             LEFT JOIN entities e ON e.id = sie.entity_id
-            WHERE si.id <> :source_item_id
-              AND si.provider <> :provider
-              AND si.fetched_at >= now() - interval '14 days'
             GROUP BY si.id
             ORDER BY si.fetched_at DESC
-            LIMIT 200
             """
         ),
-        {"source_item_id": source_item_id, "provider": features.provider},
+        {
+            "source_item_id": source_item_id,
+            "provider": features.provider,
+            "event_fingerprint": features.event_fingerprint,
+            "title": features.title,
+        },
     )
 
     written = 0

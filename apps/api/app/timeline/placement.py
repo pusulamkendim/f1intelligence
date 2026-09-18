@@ -120,6 +120,13 @@ def explicit_f1_season(value: str) -> int | None:
     years = [int(match.group(1)) for match in _SEASON_RE.finditer(normalized)]
     for year in years:
         token = str(year)
+        year_index = normalized.find(token)
+        local = normalized[
+            max(0, year_index - 32) : year_index + len(token) + 32
+        ]
+        if any(term in local for term in _NON_F1_EVENT_TERMS):
+            continue
+
         strong_patterns = (
             rf"\b{token}\s+(?:formula 1|f1)\b",
             rf"\b(?:formula 1|f1)\s+{token}\b",
@@ -132,13 +139,6 @@ def explicit_f1_season(value: str) -> int | None:
         )
         if any(re.search(pattern, normalized) for pattern in strong_patterns):
             return year
-
-        year_index = normalized.find(token)
-        local = normalized[
-            max(0, year_index - 32) : year_index + len(token) + 32
-        ]
-        if any(term in local for term in _NON_F1_EVENT_TERMS):
-            continue
         if (
             ("f1" in normalized or "formula 1" in normalized)
             and any(

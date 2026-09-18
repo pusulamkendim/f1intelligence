@@ -372,3 +372,13 @@ def test_f1_future_season_still_maps_to_scheduled_season() -> None:
     assert placement.season == 2027
     assert placement.precision == "season"
     assert placement.temporal_relation == "scheduled_for"
+
+
+
+def test_non_f1_year_context_beats_aggregate_f1_year_phrase() -> None:
+    value = (
+        "F1 clash avoided but can Lando Norris or Max Verstappen race at "
+        "Le Mans 2027? The wider F1 2027 calendar avoids a direct clash."
+    )
+
+    assert explicit_f1_season(value) is None

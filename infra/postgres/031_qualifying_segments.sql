@@ -142,6 +142,9 @@ ALTER TABLE timeline_placements
     );
 
 ALTER TABLE timeline_placements
+    DROP CONSTRAINT IF EXISTS timeline_placements_segment_requires_session_check;
+
+ALTER TABLE timeline_placements
     ADD CONSTRAINT timeline_placements_segment_requires_session_check
     CHECK (segment_id IS NULL OR session_id IS NOT NULL);
 

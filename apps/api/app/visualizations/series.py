@@ -67,17 +67,87 @@ def position_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def lap_time_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    materialized = list(rows)
+    valid = [r for r in materialized if r.get("lap_duration_seconds") is not None and not r.get("is_pit_out_lap", False)]
+    session_best = min((float(r["lap_duration_seconds"]) for r in valid), default=None)
+    personal_best: dict[str, float] = {}
+    for row in valid:
+        key = str(row["driver_key"])
+        value = float(row["lap_duration_seconds"])
+        personal_best[key] = min(personal_best.get(key, value), value)
+
     def point(row: dict[str, Any]) -> dict[str, Any] | None:
         value = row.get("lap_duration_seconds")
         if value is None:
             return None
+        seconds = float(value)
+        status = None
+        if not row.get("is_pit_out_lap", False):
+            if session_best is not None and seconds == session_best:
+                status = "purple"
+            elif seconds == personal_best.get(str(row["driver_key"])):
+                status = "green"
+            else:
+                status = "yellow"
         return {
             "lap": int(row["lap_number"]),
-            "seconds": float(value),
+            "seconds": seconds,
+            "timing_status": status,
             "is_pit_out_lap": bool(row.get("is_pit_out_lap", False)),
         }
 
-    return _series(rows, point, "seconds")
+    return _series(materialized, point, "seconds")
+
+
+def sector_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    materialized = list(rows)
+    fields = ("sector_1_duration_seconds", "sector_2_duration_seconds", "sector_3_duration_seconds")
+    session_best = {
+        field: min((float(r[field]) for r in materialized if r.get(field) is not None), default=None)
+        for field in fields
+    }
+    personal_best: dict[tuple[str, str], float] = {}
+    for row in materialized:
+        driver_key = str(row["driver_key"])
+        for field in fields:
+            if row.get(field) is None:
+                continue
+            value = float(row[field])
+            key = (driver_key, field)
+            personal_best[key] = min(personal_best.get(key, value), value)
+
+    def point(row: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {"lap": int(row["lap_number"])}
+        driver_key = str(row["driver_key"])
+        for index, field in enumerate(fields, start=1):
+            value = row.get(field)
+            if value is None:
+                continue
+            seconds = float(value)
+            if session_best[field] is not None and seconds == session_best[field]:
+                status = "purple"
+            elif seconds == personal_best[(driver_key, field)]:
+                status = "green"
+            else:
+                status = "yellow"
+            payload[f"s{index}_seconds"] = seconds
+            payload[f"s{index}_status"] = status
+        return payload
+
+    return _series(materialized, point, "seconds")
+
+
+def speed_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _series(
+        rows,
+        lambda r: {
+            "lap": int(r["lap_number"]),
+            "i1_kph": r.get("i1_speed_kph"),
+            "i2_kph": r.get("i2_speed_kph"),
+            "speed_trap_kph": r.get("st_speed_kph"),
+        },
+        "kph",
+    )
 
 
 def stint_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:

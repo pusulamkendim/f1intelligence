@@ -85,7 +85,7 @@ async def race_classification(
                        rr.car_number AS driver_number,
                        e.slug AS driver_key,
                        e.display_name AS driver_label,
-                       se.name_acronym AS driver_acronym,
+                       COALESCE(se.name_acronym, code.alias) AS driver_acronym,
                        te.slug AS team_key,
                        te.display_name AS team_label,
                        se.team_colour AS team_color,
@@ -105,6 +105,15 @@ async def race_classification(
                     ORDER BY rs.starts_at DESC
                     LIMIT 1
                 ) se ON true
+                LEFT JOIN LATERAL (
+                    SELECT ea.alias
+                    FROM entity_aliases ea
+                    WHERE ea.entity_id = rr.driver_entity_id
+                      AND ea.alias_type = 'driver_code'
+                      AND ea.enabled = true
+                    ORDER BY ea.confidence DESC
+                    LIMIT 1
+                ) code ON true
                 WHERE rr.race_id = :race_id
                 ORDER BY rr.finish_position NULLS LAST, rr.position_text
                 """
@@ -173,6 +182,15 @@ async def race_classification(
                     ORDER BY rs.starts_at DESC
                     LIMIT 1
                 ) se ON true
+                LEFT JOIN LATERAL (
+                    SELECT ea.alias
+                    FROM entity_aliases ea
+                    WHERE ea.entity_id = qr.driver_entity_id
+                      AND ea.alias_type = 'driver_code'
+                      AND ea.enabled = true
+                    ORDER BY ea.confidence DESC
+                    LIMIT 1
+                ) code ON true
                 WHERE qr.race_id = :race_id
                 ORDER BY qr.position
                 """
@@ -249,7 +267,7 @@ async def season_standings(
                        team.team_label,
                        team.team_color,
                        team.driver_number,
-                       team.driver_acronym,
+                       COALESCE(team.driver_acronym, code.alias) AS driver_acronym,
                        latest.provider,
                        latest.source_url,
                        latest.fetched_at,
@@ -281,6 +299,15 @@ async def season_standings(
                     ORDER BY r.round DESC
                     LIMIT 1
                 ) team ON true
+                LEFT JOIN LATERAL (
+                    SELECT ea.alias
+                    FROM entity_aliases ea
+                    WHERE ea.entity_id = dsr.driver_entity_id
+                      AND ea.alias_type = 'driver_code'
+                      AND ea.enabled = true
+                    ORDER BY ea.confidence DESC
+                    LIMIT 1
+                ) code ON true
                 WHERE e.id IS NOT NULL
                 ORDER BY latest.after_round, dsr.position
                 """
@@ -430,7 +457,7 @@ async def driver_season_results(
                    team.slug AS team_key,
                    team.display_name AS team_label,
                    entry.team_colour AS team_color,
-                   entry.name_acronym AS driver_acronym,
+                   COALESCE(entry.name_acronym, code.alias) AS driver_acronym,
                    rr.provider AS provider,
                    rr.source_url AS source_url,
                    rr.fetched_at AS fetched_at,
@@ -455,6 +482,15 @@ async def driver_season_results(
                 ORDER BY rs.starts_at DESC
                 LIMIT 1
             ) entry ON true
+            LEFT JOIN LATERAL (
+                SELECT ea.alias
+                FROM entity_aliases ea
+                WHERE ea.entity_id = :driver_id
+                  AND ea.alias_type = 'driver_code'
+                  AND ea.enabled = true
+                ORDER BY ea.confidence DESC
+                LIMIT 1
+            ) code ON true
             WHERE r.season = :season
               AND (rr.id IS NOT NULL OR qr.id IS NOT NULL)
             ORDER BY r.round

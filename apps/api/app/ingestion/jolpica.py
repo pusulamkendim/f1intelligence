@@ -358,3 +358,31 @@ def parse_qualifying_results(payload: dict[str, Any]) -> list[JolpicaQualifyingR
         )
         for row in race.get("QualifyingResults", [])
     ]
+
+
+
+def parse_sprint_results(payload: dict[str, Any]) -> list[JolpicaSprintResult]:
+    race = _race_payload(payload)
+    if race is None:
+        return []
+    parsed: list[JolpicaSprintResult] = []
+    for row in race.get("SprintResults", []):
+        fastest = row.get("FastestLap", {})
+        parsed.append(
+            JolpicaSprintResult(
+                position=_int(row.get("position")),
+                position_text=row.get("positionText", ""),
+                points=Decimal(row.get("points", "0")),
+                driver_id=row["Driver"]["driverId"],
+                constructor_id=row.get("Constructor", {}).get("constructorId"),
+                car_number=_int(row.get("number")),
+                grid_position=_int(row.get("grid")),
+                laps=_int(row.get("laps")),
+                status=row.get("status"),
+                finish_time=row.get("Time", {}).get("time"),
+                fastest_lap_rank=_int(fastest.get("rank")),
+                fastest_lap_number=_int(fastest.get("lap")),
+                fastest_lap_time=fastest.get("Time", {}).get("time"),
+            )
+        )
+    return parsed

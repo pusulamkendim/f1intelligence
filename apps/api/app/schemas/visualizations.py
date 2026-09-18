@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ChartType = Literal["line", "timeline", "bar", "event_stream", "timing_table"]
+ChartType = Literal["line", "timeline", "bar", "event_stream", "timing_table", "multi_panel"]
 AxisDirection = Literal["normal", "reversed"]
 RenderPreset = Literal[
     "position-trace",

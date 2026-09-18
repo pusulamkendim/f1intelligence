@@ -81,6 +81,38 @@ def _telemetry_candidates(sessions: list[OpenF1Session], cached_keys: set[int], 
     return _bounded_candidates(sessions, cached_keys, limit=limit, now=now)
 
 
+def _location_candidates(
+    sessions: list[OpenF1Session],
+    cached_keys: set[int],
+    *,
+    limit: int = 2,
+    now: datetime | None = None,
+) -> list[OpenF1Session]:
+    current = now or datetime.now(UTC)
+    eligible = sorted(
+        [
+            item
+            for item in sessions
+            if not item.is_cancelled and item.date_start <= current
+        ],
+        key=lambda item: item.date_start,
+    )
+    if not eligible or limit <= 0:
+        return []
+
+    latest = eligible[-1]
+    uncached = [
+        item
+        for item in eligible
+        if item.session_key not in cached_keys
+        and item.session_key != latest.session_key
+    ]
+    selected = uncached[: max(0, limit - 1)]
+    if latest.session_key not in {item.session_key for item in selected}:
+        selected.append(latest)
+    return selected[:limit]
+
+
 def _race_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
     return [item for item in sessions if item.session_code in {"race", "sprint"}]
 
@@ -172,15 +204,17 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
             telemetry_summary.append({"session_key": item.session_key, "laps": len(laps), "stints": len(stints), "positions": len(positions)})
 
         location_summary: list[dict[str, int]] = []
-        for item in _bounded_candidates(
+        for item in _location_candidates(
             race_sessions,
             location_cached,
             limit=telemetry_limit,
         ):
+            current = datetime.now(UTC)
+            location_end = min(item.date_end or current, current)
             locations = await client.locations(
                 item.session_key,
                 date_start=item.date_start,
-                date_end=item.date_end,
+                date_end=location_end,
                 sample_interval_ms=1000,
             )
             async with SessionLocal() as db:

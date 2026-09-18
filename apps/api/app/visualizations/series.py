@@ -37,6 +37,7 @@ def _series(rows: Iterable[dict[str, Any]], point_builder: Any, unit: str) -> li
             "label": str(row["driver_label"]),
             "driver_number": row.get("driver_number"),
             "driver_acronym": row.get("driver_acronym"),
+            "classification_position": row.get("classification_position"),
             "team_key": row.get("team_key"),
             "team_label": row.get("team_label"),
             "color": normalize_team_color(row.get("team_color")),
@@ -44,11 +45,25 @@ def _series(rows: Iterable[dict[str, Any]], point_builder: Any, unit: str) -> li
         point = point_builder(row)
         if point is not None:
             grouped[key].append(point)
-    return [
-        {"key": key, **meta[key], "unit": unit, "points": sorted(points, key=_point_sort_key)}
-        for key, points in sorted(grouped.items())
+    series = [
+        {
+            "key": key,
+            **meta[key],
+            "unit": unit,
+            "points": sorted(points, key=_point_sort_key),
+        }
+        for key, points in grouped.items()
         if points
     ]
+    return sorted(
+        series,
+        key=lambda item: (
+            item.get("classification_position")
+            if item.get("classification_position") is not None
+            else 999,
+            item.get("driver_acronym") or item["key"],
+        ),
+    )
 
 
 def _point_sort_key(point: dict[str, Any]) -> tuple[Any, ...]:

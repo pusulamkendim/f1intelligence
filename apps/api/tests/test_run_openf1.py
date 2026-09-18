@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from app.ingestion.openf1 import OpenF1Session
-from app.ingestion.run_openf1 import _bounded_candidates, _result_candidates, _telemetry_candidates
+from app.ingestion.run_openf1 import _bounded_candidates, _location_candidates, _result_candidates, _telemetry_candidates
 
 NOW = datetime(2026, 9, 17, 12, tzinfo=UTC)
 
@@ -27,3 +27,33 @@ def test_bounded_candidates_backfill_oldest_and_refresh_latest() -> None:
 def test_telemetry_candidates_share_bounded_policy() -> None:
     sessions = [_session(1, 10), _session(2, 8), _session(3, 6)]
     assert [row.session_key for row in _telemetry_candidates(sessions, {1}, limit=2, now=NOW)] == [2, 3]
+
+
+
+def test_location_candidates_refresh_active_race_session() -> None:
+    completed = _session(1, 2)
+    active = OpenF1Session(
+        2,
+        1,
+        2026,
+        "Race",
+        "Race",
+        "race",
+        None,
+        None,
+        None,
+        None,
+        NOW - timedelta(hours=1),
+        NOW + timedelta(hours=1),
+        "+00:00:00",
+        False,
+    )
+
+    selected = _location_candidates(
+        [completed, active],
+        {1, 2},
+        limit=1,
+        now=NOW,
+    )
+
+    assert [row.session_key for row in selected] == [2]

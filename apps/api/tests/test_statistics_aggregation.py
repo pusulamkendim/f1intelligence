@@ -63,7 +63,7 @@ def test_driver_statistics_separate_gp_and_sprint_semantics() -> None:
     assert stats.sprint_entries == 1
     assert stats.sprint_starts == 1
     assert stats.sprint_wins == 1
-    assert stats.sprint_podiums == 1
+    assert stats.sprint_top3s == 1
 
     assert stats.average_grid == 3
     assert stats.average_finish == 1.5
@@ -253,3 +253,23 @@ def test_poles_follow_main_race_grid_while_qualifying_p1_is_separate() -> None:
 
     assert stats.poles == 1
     assert stats.qualifying_p1s == 0
+
+
+
+def test_pole_is_retained_when_driver_does_not_start() -> None:
+    stats = aggregate_driver_statistics(
+        [
+            DriverResult(
+                2025,
+                1,
+                None,
+                1,
+                Decimal("0"),
+                "Did not start",
+                None,
+            )
+        ]
+    )
+
+    assert stats.poles == 1
+    assert stats.starts == 0

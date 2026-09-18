@@ -103,7 +103,7 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
     ],
     "stint-strategy": [
         {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
-        {"key": "compound", "label": "TYRE", "align": "center"},
+        {"key": "compound", "label": "TYRE", "align": "center", "status_key": "compound_token"},
         {"key": "lap_start", "label": "FROM", "formatter": "integer"},
         {"key": "lap_end", "label": "TO", "formatter": "integer"},
         {"key": "tyre_age_at_start", "label": "AGE", "formatter": "integer"},
@@ -126,6 +126,8 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
         {"key": "team_label", "label": "TEAM", "align": "left"},
         {"key": "grid_position", "label": "GRID", "formatter": "position"},
         {"key": "finish_time", "label": "TIME / GAP", "align": "right"},
+        {"key": "fastest_lap_time", "label": "FASTEST LAP", "formatter": "lap-time", "status_key": "fastest_lap_token"},
+        {"key": "status", "label": "STATUS", "align": "left"},
         {"key": "points", "label": "PTS", "formatter": "raw"},
     ],
     "qualifying-classification": [

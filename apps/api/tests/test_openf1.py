@@ -182,3 +182,25 @@ async def test_location_client_chunks_large_session_windows() -> None:
     assert "date%3E%3D=" in calls[0]
     assert "date%3C=" in calls[0]
     assert [(row.x, row.y) for row in rows] == [(100, 200), (300, 400)]
+
+
+
+@pytest.mark.asyncio
+async def test_optional_endpoint_treats_404_as_no_data() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "not found"}, request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenF1Client(
+            http_client,
+            base_url="https://openf1.test/v1",
+            min_interval_seconds=0,
+        )
+        rows = await client._get_optional(
+            "starting_grid",
+            session_key=11234,
+        )
+
+    assert rows == []

@@ -54,13 +54,23 @@ async def _driver_id(
     return row["id"]
 
 
+def _season_filter(
+    column: str,
+    season: int | None,
+) -> tuple[str, dict[str, int]]:
+    if season is None:
+        return "", {}
+    return f"AND {column} = :season", {"season": season}
+
+
 async def _historical_rows(
     db: AsyncSession,
     entity_id: Any,
     season: int | None,
 ) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
-    season_clause = "AND r.season = :season" if season is not None else ""
-    params = {"entity_id": entity_id, "season": season}
+    season_clause, season_params = _season_filter("r.season", season)
+    standings_season_clause, _ = _season_filter("dss.season", season)
+    params = {"entity_id": entity_id, **season_params}
 
     results = (
         await db.execute(
@@ -151,10 +161,7 @@ async def _historical_rows(
                     JOIN driver_standing_rows dsr
                       ON dsr.snapshot_id = dss.id
                     WHERE dsr.driver_entity_id = :entity_id
-                      AND (
-                          :season IS NULL
-                          OR dss.season = :season
-                      )
+                      {standings_season_clause}
                     ORDER BY
                         dss.season,
                         dss.after_round DESC,

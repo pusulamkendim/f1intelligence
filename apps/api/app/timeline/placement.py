@@ -27,7 +27,16 @@ _SESSION_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("practice_2", ("practice 2", "fp2", "free practice 2")),
     ("practice_3", ("practice 3", "fp3", "free practice 3")),
     ("qualifying", ("qualifying", "quali")),
-    ("sprint", ("sprint race", "sprint")),
+    (
+        "sprint",
+        (
+            "sprint race",
+            "sprint report",
+            "sprint recap",
+            "sprint result",
+            "sprint results",
+        ),
+    ),
     (
         "race",
         (
@@ -90,6 +99,8 @@ def explicit_season(value: str) -> int | None:
 
 def infer_session_code(value: str) -> str | None:
     normalized = _normalized(value)
+    if normalized == "sprint":
+        return "sprint"
     for code, phrases in _SESSION_PATTERNS:
         if any(phrase in normalized for phrase in phrases):
             return code

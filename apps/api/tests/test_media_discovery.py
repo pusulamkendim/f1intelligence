@@ -6,6 +6,7 @@ import pytest
 from app.ingestion.run_media_discovery import (
     _normalize_media_context,
     _race_id_from_classifications,
+    _selected_source_keys,
 )
 
 
@@ -52,3 +53,12 @@ async def test_media_race_lookup_uses_canonical_races_entity_id() -> None:
     assert "WHERE entity_id = :entity_id" in sql
     assert "canonical_entity_id" not in sql
     assert params == {"entity_id": entity_id}
+
+
+
+def test_media_discovery_defaults_to_official_sources() -> None:
+    assert _selected_source_keys([]) == ["formula1", "williams", "alpine"]
+
+
+def test_f1_fansite_is_explicit_optional_fallback() -> None:
+    assert _selected_source_keys(["f1-fansite"]) == ["f1-fansite"]

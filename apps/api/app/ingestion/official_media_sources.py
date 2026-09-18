@@ -264,11 +264,11 @@ def _best_img_candidate(
         )
 
     for key, score in (
-        ("data-full-url", 10_000),
-        ("data-original", 9_500),
-        ("data-src", 100),
-        ("data-lazy-src", 90),
-        ("src", 10),
+        ("data-full-url", 100_000),
+        ("data-original", 95_000),
+        ("data-src", 0),
+        ("data-lazy-src", 0),
+        ("src", 0),
     ):
         value = attrs.get(key)
         if value:

@@ -273,3 +273,44 @@ def test_pole_is_retained_when_driver_does_not_start() -> None:
 
     assert stats.poles == 1
     assert stats.starts == 0
+
+
+
+def test_points_extend_standings_with_newer_sprint_before_gp_result() -> None:
+    stats = aggregate_driver_statistics(
+        [
+            DriverResult(
+                2026,
+                10,
+                2,
+                2,
+                Decimal("18"),
+                "Finished",
+                None,
+            )
+        ],
+        standings=[
+            DriverSeasonStanding(
+                2026,
+                10,
+                1,
+                Decimal("210"),
+                False,
+            )
+        ],
+        sprints=[
+            DriverSprintResult(
+                2026,
+                11,
+                1,
+                1,
+                Decimal("8"),
+                "Finished",
+            )
+        ],
+    )
+
+    assert stats.points == Decimal("218")
+    assert stats.race_points == Decimal("18")
+    assert stats.sprint_points == Decimal("8")
+    assert stats.points_adjustment == Decimal("192")

@@ -83,6 +83,37 @@ CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
         {"key": "team", "label": "TEAM", "align": "left"},
         {"key": "qualifying_seconds", "label": "TIME", "formatter": "lap-time"},
     ],
+    "race-classification": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "team_label", "label": "TEAM", "align": "left"},
+        {"key": "grid_position", "label": "GRID", "formatter": "position"},
+        {"key": "finish_time", "label": "TIME / GAP", "align": "right"},
+        {"key": "points", "label": "PTS", "formatter": "raw"},
+    ],
+    "qualifying-classification": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "team_label", "label": "TEAM", "align": "left"},
+        {"key": "q1", "label": "Q1", "formatter": "lap-time"},
+        {"key": "q2", "label": "Q2", "formatter": "lap-time"},
+        {"key": "q3", "label": "Q3", "formatter": "lap-time"},
+    ],
+    "championship-standings": [
+        {"key": "position", "label": "POS", "formatter": "position"},
+        {"key": "driver_acronym", "label": "DRIVER", "align": "left"},
+        {"key": "team_label", "label": "TEAM", "align": "left"},
+        {"key": "points", "label": "PTS", "formatter": "raw"},
+        {"key": "wins", "label": "WINS", "formatter": "integer"},
+    ],
+    "driver-season-results": [
+        {"key": "round", "label": "RD", "formatter": "integer"},
+        {"key": "race_label", "label": "GRAND PRIX", "align": "left"},
+        {"key": "qualifying_position", "label": "QUALI", "formatter": "position"},
+        {"key": "grid_position", "label": "GRID", "formatter": "position"},
+        {"key": "finish_position", "label": "RACE", "formatter": "position"},
+        {"key": "points", "label": "PTS", "formatter": "raw"},
+    ],
 }
 
 

@@ -8,12 +8,14 @@ from app.ingestion.jolpica import (
     JolpicaQualifyingResult,
     JolpicaRace,
     JolpicaRaceResult,
+    JolpicaSprintResult,
 )
 from app.ingestion.run_jolpica import (
     _candidate_rounds,
     _fetch_completed_round,
     _rounds_to_fetch,
     _source_url,
+    _sprint_rounds_to_backfill,
 )
 
 
@@ -24,6 +26,7 @@ def _race(round_number: int, start_at: datetime | None, race_date: date) -> Jolp
         name=f"Round {round_number}",
         race_date=race_date,
         start_at=start_at,
+        sprint_start_at=None,
         source_url=None,
         circuit=JolpicaCircuit(
             provider_id=f"circuit-{round_number}",
@@ -54,6 +57,25 @@ def _result(driver_id: str) -> JolpicaRaceResult:
         fastest_lap_time="1:20.000",
     )
 
+
+
+
+def _sprint_result(driver_id: str) -> JolpicaSprintResult:
+    return JolpicaSprintResult(
+        position=1,
+        position_text="1",
+        points=Decimal("8"),
+        driver_id=driver_id,
+        constructor_id="test-team",
+        car_number=1,
+        grid_position=2,
+        laps=19,
+        status="Finished",
+        finish_time="31:42.100",
+        fastest_lap_rank=2,
+        fastest_lap_number=15,
+        fastest_lap_time="1:35.100",
+    )
 
 def _qualifying(driver_id: str) -> JolpicaQualifyingResult:
     return JolpicaQualifyingResult(
@@ -109,8 +131,16 @@ async def test_completed_round_fetch_skips_round_without_race_results() -> None:
             self.qualifying_calls.append(round_number)
             return [_qualifying("driver-1")]
 
+        async def sprint_results(self, season: int, round_number: int):
+            raise AssertionError("sprint endpoint should not be called")
+
     client = FakeClient()
-    completed = await _fetch_completed_round(client, 2026, 2)  # type: ignore[arg-type]
+    completed = await _fetch_completed_round(
+        client,
+        2026,
+        2,
+        has_sprint=False,
+    )  # type: ignore[arg-type]
 
     assert completed is None
     assert client.qualifying_calls == []
@@ -129,14 +159,63 @@ async def test_completed_round_fetch_includes_qualifying() -> None:
             assert round_number == 1
             return [_qualifying("driver-1")]
 
-    completed = await _fetch_completed_round(FakeClient(), 2026, 1)  # type: ignore[arg-type]
+        async def sprint_results(self, season: int, round_number: int):
+            assert season == 2026
+            assert round_number == 1
+            return [_sprint_result("driver-1")]
+
+    completed = await _fetch_completed_round(
+        FakeClient(),
+        2026,
+        1,
+        has_sprint=True,
+    )  # type: ignore[arg-type]
 
     assert completed is not None
     assert completed[0] == 1
     assert completed[1][0].driver_id == "driver-1"
     assert completed[2][0].driver_id == "driver-1"
+    assert completed[3][0].points == Decimal("8")
 
 
 def test_result_source_urls_are_round_scoped() -> None:
     assert _source_url(2026, "race_results", 4).endswith("/2026/4/results.json")
-    assert _source_url(2026, "qualifying_results", 4).endswith("/2026/4/qualifying.json")
+    assert _source_url(2026, "qualifying_results", 4).endswith(
+        "/2026/4/qualifying.json"
+    )
+    assert _source_url(2026, "sprint_results", 4).endswith(
+        "/2026/4/sprint.json"
+    )
+
+
+
+def test_sprint_backfill_includes_cached_race_with_missing_sprint() -> None:
+    sprint_race = JolpicaRace(
+        season=2026,
+        round=2,
+        name="Sprint Round",
+        race_date=date(2026, 3, 15),
+        start_at=datetime(2026, 3, 15, 7, tzinfo=UTC),
+        sprint_start_at=datetime(2026, 3, 14, 3, tzinfo=UTC),
+        source_url=None,
+        circuit=JolpicaCircuit(
+            provider_id="shanghai",
+            name="Shanghai",
+            locality=None,
+            country=None,
+            latitude=None,
+            longitude=None,
+            source_url=None,
+        ),
+    )
+
+    assert _sprint_rounds_to_backfill(
+        [sprint_race],
+        [2],
+        set(),
+    ) == {2}
+    assert _sprint_rounds_to_backfill(
+        [sprint_race],
+        [2],
+        {2},
+    ) == set()

@@ -163,3 +163,30 @@ def stint_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         },
         "stint",
     )
+
+
+def interval_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _series(
+        rows,
+        lambda r: {
+            "timestamp": r["observed_at"].isoformat(),
+            "gap_to_leader_seconds": r.get("gap_to_leader_seconds"),
+            "interval_seconds": r.get("interval_seconds"),
+            "gap_text": r.get("gap_to_leader_text"),
+            "interval_text": r.get("interval_text"),
+        },
+        "seconds",
+    )
+
+
+def pit_stop_series(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _series(
+        rows,
+        lambda r: {
+            "lap": int(r["lap_number"]),
+            "timestamp": r["observed_at"].isoformat(),
+            "stop_seconds": r.get("stop_duration_seconds"),
+            "pit_lane_seconds": r.get("lane_duration_seconds"),
+        },
+        "seconds",
+    )

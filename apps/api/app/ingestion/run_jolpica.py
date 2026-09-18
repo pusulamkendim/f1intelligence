@@ -17,6 +17,9 @@ from app.ingestion.jolpica import (
     JolpicaSprintResult,
 )
 from app.ingestion.jolpica_calendar_store import upsert_calendar
+from app.ingestion.jolpica_reconciliation import (
+    reconcile_jolpica_season_entities,
+)
 from app.ingestion.jolpica_store import (
     record_sync_run,
     store_constructor_standings,
@@ -239,12 +242,22 @@ async def sync_jolpica(
         client = JolpicaClient(http_client)
         calendar = await client.season_calendar(season)
         candidates = _candidate_rounds(calendar, round_number)
+        season_drivers = await client.season_drivers(season)
+        season_constructors = await client.season_constructors(season)
+        season_standings = await client.driver_standings(season)
 
         async with SessionLocal() as session:
             async with session.begin():
                 calendar_written = await upsert_calendar(
                     session,
                     calendar,
+                )
+                reconciliation = await reconcile_jolpica_season_entities(
+                    session,
+                    season=season,
+                    drivers=season_drivers,
+                    constructors=season_constructors,
+                    standings=season_standings,
                 )
                 already_imported = await imported_result_rounds(
                     session,
@@ -262,7 +275,31 @@ async def sync_jolpica(
                     source_url=_source_url(season, "calendar"),
                     records_seen=len(calendar),
                     records_written=calendar_written,
+                    metadata={
+                        "entity_reconciliation": {
+                            "drivers": reconciliation.drivers,
+                            "constructors": reconciliation.constructors,
+                            "auto_created": reconciliation.auto_created,
+                            "validity_extensions": (
+                                reconciliation.validity_extensions
+                            ),
+                            "exact_identity_matches": (
+                                reconciliation.exact_identity_matches
+                            ),
+                            "roster_links": reconciliation.roster_links,
+                            "review_required": list(
+                                reconciliation.review_required
+                            ),
+                        }
+                    },
                 )
+
+        if reconciliation.blocked:
+            joined = ", ".join(reconciliation.review_required)
+            raise ValueError(
+                "canonical entity reconciliation requires review: "
+                f"{joined}"
+            )
 
         sprint_rounds = _sprint_rounds_to_fetch(
             calendar,
@@ -406,6 +443,15 @@ async def sync_jolpica(
         "sprint_results_written": sprint_results_written,
         "driver_standings_rows": len(drivers),
         "constructor_standings_rows": len(constructors),
+        "entity_reconciliation": {
+            "drivers": reconciliation.drivers,
+            "constructors": reconciliation.constructors,
+            "auto_created": reconciliation.auto_created,
+            "validity_extensions": reconciliation.validity_extensions,
+            "exact_identity_matches": reconciliation.exact_identity_matches,
+            "roster_links": reconciliation.roster_links,
+            "review_required": list(reconciliation.review_required),
+        },
     }
 
 

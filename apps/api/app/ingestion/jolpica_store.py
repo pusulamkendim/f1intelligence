@@ -15,6 +15,7 @@ from app.ingestion.jolpica import (
     JolpicaSprintResult,
 )
 from app.ingestion.jolpica_hashes import constructor_standings_hash, driver_standings_hash
+from app.ingestion.jolpica_reconciliation import upsert_driver_team_participation
 
 PROVIDER = "jolpica"
 
@@ -228,6 +229,14 @@ async def upsert_race_results(
                 "fetched_at": fetched_at,
             },
         )
+        if row.constructor_id is not None:
+            await upsert_driver_team_participation(
+                session,
+                driver_entity_id=driver_entities[row.driver_id],
+                team_entity_id=team_entities[row.constructor_id],
+                season=season,
+                source_url=source_url,
+            )
     if rows:
         await session.execute(
             text("UPDATE races SET status = 'completed', updated_at = now() WHERE id = :race_id"),
@@ -305,6 +314,14 @@ async def upsert_qualifying_results(
                 "fetched_at": fetched_at,
             },
         )
+        if row.constructor_id is not None:
+            await upsert_driver_team_participation(
+                session,
+                driver_entity_id=driver_entities[row.driver_id],
+                team_entity_id=team_entities[row.constructor_id],
+                season=season,
+                source_url=source_url,
+            )
     return len(rows)
 
 
@@ -577,4 +594,12 @@ async def upsert_sprint_results(
                 "fetched_at": fetched_at,
             },
         )
+        if row.constructor_id is not None:
+            await upsert_driver_team_participation(
+                session,
+                driver_entity_id=driver_entities[row.driver_id],
+                team_entity_id=team_entities[row.constructor_id],
+                season=season,
+                source_url=source_url,
+            )
     return len(rows)

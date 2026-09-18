@@ -38,6 +38,26 @@ class JolpicaRace:
 
 
 @dataclass(frozen=True)
+class JolpicaDriverIdentity:
+    driver_id: str
+    given_name: str
+    family_name: str
+    date_of_birth: date | None
+    nationality: str | None
+    permanent_number: int | None
+    code: str | None
+    source_url: str | None
+
+
+@dataclass(frozen=True)
+class JolpicaConstructorIdentity:
+    constructor_id: str
+    name: str
+    nationality: str | None
+    source_url: str | None
+
+
+@dataclass(frozen=True)
 class JolpicaDriverStanding:
     position: int
     points: Decimal
@@ -173,18 +193,40 @@ class JolpicaClient:
     async def season_calendar(self, season: int) -> list[JolpicaRace]:
         return parse_calendar(await self._get(f"{season}.json"))
 
+    async def season_drivers(
+        self,
+        season: int,
+    ) -> list[JolpicaDriverIdentity]:
+        return parse_driver_identities(
+            await self._get(f"{season}/drivers.json?limit=2000")
+        )
+
+    async def season_constructors(
+        self,
+        season: int,
+    ) -> list[JolpicaConstructorIdentity]:
+        return parse_constructor_identities(
+            await self._get(f"{season}/constructors.json?limit=2000")
+        )
+
     async def driver_standings(
         self, season: int, round_number: int | None = None
     ) -> list[JolpicaDriverStanding]:
         scope = f"{season}/{round_number}" if round_number is not None else str(season)
-        return parse_driver_standings(await self._get(f"{scope}/driverstandings.json"))
+        return parse_driver_standings(
+            await self._get(
+                f"{scope}/driverstandings.json?limit=2000"
+            )
+        )
 
     async def constructor_standings(
         self, season: int, round_number: int | None = None
     ) -> list[JolpicaConstructorStanding]:
         scope = f"{season}/{round_number}" if round_number is not None else str(season)
         return parse_constructor_standings(
-            await self._get(f"{scope}/constructorstandings.json")
+            await self._get(
+                f"{scope}/constructorstandings.json?limit=2000"
+            )
         )
 
     async def race_results(self, season: int, round_number: int) -> list[JolpicaRaceResult]:
@@ -260,6 +302,47 @@ def parse_calendar(payload: dict[str, Any]) -> list[JolpicaRace]:
             )
         )
     return parsed
+
+
+
+def parse_driver_identities(
+    payload: dict[str, Any],
+) -> list[JolpicaDriverIdentity]:
+    rows = payload["MRData"]["DriverTable"].get("Drivers", [])
+    parsed: list[JolpicaDriverIdentity] = []
+    for row in rows:
+        birth = row.get("dateOfBirth")
+        parsed.append(
+            JolpicaDriverIdentity(
+                driver_id=row["driverId"],
+                given_name=row["givenName"],
+                family_name=row["familyName"],
+                date_of_birth=date.fromisoformat(birth) if birth else None,
+                nationality=row.get("nationality"),
+                permanent_number=_int(row.get("permanentNumber")),
+                code=row.get("code"),
+                source_url=row.get("url"),
+            )
+        )
+    return parsed
+
+
+def parse_constructor_identities(
+    payload: dict[str, Any],
+) -> list[JolpicaConstructorIdentity]:
+    rows = payload["MRData"]["ConstructorTable"].get(
+        "Constructors",
+        [],
+    )
+    return [
+        JolpicaConstructorIdentity(
+            constructor_id=row["constructorId"],
+            name=row["name"],
+            nationality=row.get("nationality"),
+            source_url=row.get("url"),
+        )
+        for row in rows
+    ]
 
 
 def _standings_list(payload: dict[str, Any]) -> dict[str, Any] | None:

@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from app.ingestion.openf1 import OpenF1Session
 from app.ingestion.run_openf1 import (
     _bounded_candidates,
     _fetch_context_rows,
+    _fetch_locations_optional,
     _grid_sessions,
     _location_candidates,
     _result_candidates,
@@ -118,3 +120,60 @@ async def test_context_fetches_use_optional_openf1_datasets() -> None:
         ("pit", 11234),
         ("weather", 11234),
     ]
+
+
+
+@pytest.mark.asyncio
+async def test_location_500_is_reported_as_optional_skip() -> None:
+    request = httpx.Request(
+        "GET",
+        "https://openf1.test/v1/location",
+    )
+    response = httpx.Response(
+        500,
+        request=request,
+    )
+
+    class FakeClient:
+        async def locations(self, *args, **kwargs):
+            raise httpx.HTTPStatusError(
+                "retryable OpenF1 HTTP 500",
+                request=request,
+                response=response,
+            )
+
+    rows, status = await _fetch_locations_optional(
+        FakeClient(),  # type: ignore[arg-type]
+        _session(11234, 2),
+        now=NOW,
+    )
+
+    assert rows == []
+    assert status == 500
+
+
+@pytest.mark.asyncio
+async def test_location_non_retryable_error_still_fails() -> None:
+    request = httpx.Request(
+        "GET",
+        "https://openf1.test/v1/location",
+    )
+    response = httpx.Response(
+        401,
+        request=request,
+    )
+
+    class FakeClient:
+        async def locations(self, *args, **kwargs):
+            raise httpx.HTTPStatusError(
+                "OpenF1 HTTP 401",
+                request=request,
+                response=response,
+            )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await _fetch_locations_optional(
+            FakeClient(),  # type: ignore[arg-type]
+            _session(11234, 2),
+            now=NOW,
+        )

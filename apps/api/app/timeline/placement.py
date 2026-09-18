@@ -374,6 +374,7 @@ async def _story_races(session: AsyncSession, story_id: UUID):
                         ELSE 1
                     END DESC,
                     CASE COALESCE(ea.alias_type, '')
+                        WHEN 'fia_event_name' THEN 5
                         WHEN 'race_name' THEN 4
                         WHEN 'canonical' THEN 3
                         WHEN 'venue' THEN 2
@@ -416,6 +417,7 @@ def _race_scope_rank(race: dict) -> int:
 
 def _race_alias_rank(race: dict) -> int:
     return {
+        "fia_event_name": 5,
         "race_name": 4,
         "canonical": 3,
         "venue": 2,
@@ -438,19 +440,18 @@ def _race_anchor_is_eligible(
         detected.intersection({"title", "standfirst", "summary"})
     )
 
-    if alias_type in {"race_name", "canonical"}:
+    if alias_type in {"fia_event_name", "race_name", "canonical"}:
         return prominent_scope
 
-    # Source-level evidence is authoritative even if an alias-type lookup is
-    # unavailable on an older/migrated database. A lexical Grand Prix/GP alias
-    # is still an event-name signal, unlike bare venue aliases such as Madring,
-    # Silverstone or Budapest.
+    # Preserve a narrow compatibility fallback for older/migrated databases
+    # where the alias row itself cannot be resolved. Known alias types should
+    # always be governed by their canonical semantics instead.
     alias = _normalized(str(race.get("matched_alias") or ""))
     lexical_event_alias = (
         "grand prix" in alias
         or bool(re.search(r"\bgp\b", alias))
     )
-    if prominent_scope and lexical_event_alias:
+    if alias_type == "unknown" and prominent_scope and lexical_event_alias:
         return True
 
     if alias_type == "venue":

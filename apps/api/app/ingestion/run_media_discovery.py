@@ -179,10 +179,11 @@ async def _persist_media_item(
     agency: str | None = None,
     rights_evidence_url: str | None = None,
     rights_note: str | None = None,
+    season_hint: int | None = None,
     discovery_mode: str,
 ) -> None:
     stats.assets_seen += 1
-    season = _season_from_text(page_title, caption)
+    season = season_hint or _season_from_text(page_title, caption)
     normalized_title = _normalize_media_context(page_title)
     normalized_caption = _normalize_media_context(caption)
 
@@ -292,6 +293,7 @@ async def ingest_official_source(
                             items = parse_official_media_page(
                                 response.text,
                                 page_url=str(response.url),
+                                source=source,
                             )
                             stats.galleries_fetched += 1
                         except (httpx.HTTPError, RuntimeError, ValueError) as exc:
@@ -318,6 +320,7 @@ async def ingest_official_source(
                                 agency=item.agency,
                                 rights_evidence_url=source.rights_evidence_url,
                                 rights_note=item.rights_note,
+                                season_hint=item.season,
                                 discovery_mode="official_media_page",
                             )
 

@@ -3,9 +3,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+import app.ingestion.story_materialization as story_materialization
 from app.ingestion.content_cleanup import clean_summary, clean_title
 from app.ingestion.source_item_entities import SourceItemEntityClassification
-import app.ingestion.story_materialization as story_materialization
 from app.ingestion.story_materialization import (
     _converge_event_fingerprint_stories,
     _create_story,

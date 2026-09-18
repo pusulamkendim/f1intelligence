@@ -72,6 +72,7 @@ async def qualifying_segment(
             LEFT JOIN entities de ON de.id = qsr.driver_entity_id
             LEFT JOIN entities te ON te.id = qsr.team_entity_id
             WHERE qsr.segment_id = CAST(:segment_id AS uuid)
+              AND qsr.duration_seconds IS NOT NULL
             ORDER BY
                 qsr.segment_position NULLS LAST,
                 qsr.final_qualifying_position NULLS LAST,

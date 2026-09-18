@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.ingestion.openf1 import OpenF1Session
 from app.ingestion.run_openf1 import (
     _bounded_candidates,
+    _grid_sessions,
     _location_candidates,
     _result_candidates,
     _telemetry_candidates,
@@ -62,3 +63,26 @@ def test_location_candidates_refresh_active_race_session() -> None:
     )
 
     assert [row.session_key for row in selected] == [2]
+
+
+
+def test_starting_grid_candidates_only_use_main_race_sessions() -> None:
+    race = _session(1, 2)
+    sprint = OpenF1Session(
+        2,
+        1,
+        2026,
+        "Sprint",
+        "Race",
+        "sprint",
+        None,
+        None,
+        None,
+        None,
+        NOW - timedelta(hours=4),
+        NOW - timedelta(hours=3),
+        "+00:00:00",
+        False,
+    )
+
+    assert [row.session_key for row in _grid_sessions([sprint, race])] == [1]

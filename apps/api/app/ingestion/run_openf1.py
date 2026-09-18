@@ -117,6 +117,10 @@ def _race_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
     return [item for item in sessions if item.session_code in {"race", "sprint"}]
 
 
+def _grid_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
+    return [item for item in sessions if item.session_code == "race"]
+
+
 async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, object]:
     settings = get_settings()
     headers = {"User-Agent": settings.source_user_agent, "Accept": "application/json"}
@@ -162,9 +166,15 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
             unresolved_entries += unresolved
 
         race_sessions = _race_sessions(matched_sessions)
+        grid_sessions = _grid_sessions(matched_sessions)
         grid_summary: list[dict[str, int]] = []
-        for item in _bounded_candidates(race_sessions, grid_cached, limit=telemetry_limit):
-            grid = parse_starting_grid(await client._get("starting_grid", session_key=item.session_key))
+        for item in _bounded_candidates(grid_sessions, grid_cached, limit=telemetry_limit):
+            grid = parse_starting_grid(
+                await client._get_optional(
+                    "starting_grid",
+                    session_key=item.session_key,
+                )
+            )
             if not grid:
                 continue
             drivers = await client.drivers(item.session_key)
@@ -181,7 +191,12 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
 
         overtakes_summary: list[dict[str, int]] = []
         for item in _bounded_candidates(race_sessions, overtakes_cached, limit=telemetry_limit):
-            overtakes = parse_overtakes(await client._get("overtakes", session_key=item.session_key))
+            overtakes = parse_overtakes(
+                await client._get_optional(
+                    "overtakes",
+                    session_key=item.session_key,
+                )
+            )
             async with SessionLocal() as db:
                 async with db.begin():
                     driver_map = await driver_entity_map(db, session_ids[item.session_key])

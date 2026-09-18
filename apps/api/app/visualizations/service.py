@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from sqlalchemy import text
@@ -33,6 +34,7 @@ Chart = Literal[
     "segments",
     "timing-tower",
     "session-result",
+    "track-map",
 ]
 
 CLASSIC_F1_TOKENS = {
@@ -84,6 +86,13 @@ CHART_DATASETS: dict[str, tuple[str, ...]] = {
         "session_stints",
     ),
     "session-result": ("session_entries", "session_results"),
+    "track-map": (
+        "session_entries",
+        "session_locations",
+        "session_positions",
+        "session_intervals",
+        "session_laps",
+    ),
 }
 
 CLASSIC_COLUMNS: dict[str, list[dict[str, Any]]] = {
@@ -795,6 +804,234 @@ async def _timing_tower_series(
             }
         )
     return series
+
+
+async def _track_map_series(
+    session: AsyncSession,
+    session_id: Any,
+    *,
+    at: datetime | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if at is None:
+        target_result = await session.execute(
+            text(
+                """
+                SELECT max(observed_at) AS observed_at
+                FROM session_locations
+                WHERE session_id = :session_id
+                """
+            ),
+            {"session_id": session_id},
+        )
+        target = target_result.scalar_one_or_none()
+    else:
+        target = at
+
+    if target is None:
+        raise VisualizationNotFoundError("track-map location data not available")
+
+    bounds_result = await session.execute(
+        text(
+            """
+            SELECT min(x) AS min_x,
+                   max(x) AS max_x,
+                   min(y) AS min_y,
+                   max(y) AS max_y,
+                   min(z) AS min_z,
+                   max(z) AS max_z
+            FROM session_locations
+            WHERE session_id = :session_id
+            """
+        ),
+        {"session_id": session_id},
+    )
+    bounds = dict(bounds_result.mappings().one())
+
+    result = await session.execute(
+        text(
+            """
+            SELECT se.driver_number,
+                   se.name_acronym AS driver_acronym,
+                   e.slug AS driver_key,
+                   COALESCE(e.display_name, se.full_name) AS driver_label,
+                   te.slug AS team_key,
+                   COALESCE(te.display_name, se.team_name) AS team_label,
+                   se.team_colour AS team_color,
+                   loc.observed_at,
+                   loc.x,
+                   loc.y,
+                   loc.z,
+                   pos.position,
+                   iv.gap_to_leader_seconds,
+                   iv.gap_to_leader_text,
+                   iv.interval_seconds,
+                   iv.interval_text,
+                   lap.lap_number
+            FROM session_entries se
+            LEFT JOIN entities e ON e.id = se.driver_entity_id
+            LEFT JOIN entities te ON te.id = se.team_entity_id
+            JOIN LATERAL (
+                SELECT l.observed_at, l.x, l.y, l.z
+                FROM session_locations l
+                WHERE l.session_id = se.session_id
+                  AND l.provider_driver_number = se.driver_number
+                  AND l.observed_at <= :target
+                  AND l.observed_at >= :target - interval '3 seconds'
+                ORDER BY l.observed_at DESC
+                LIMIT 1
+            ) loc ON true
+            LEFT JOIN LATERAL (
+                SELECT p.position
+                FROM session_positions p
+                WHERE p.session_id = se.session_id
+                  AND p.provider_driver_number = se.driver_number
+                  AND p.observed_at <= :target
+                ORDER BY p.observed_at DESC
+                LIMIT 1
+            ) pos ON true
+            LEFT JOIN LATERAL (
+                SELECT i.gap_to_leader_seconds,
+                       i.gap_to_leader_text,
+                       i.interval_seconds,
+                       i.interval_text
+                FROM session_intervals i
+                WHERE i.session_id = se.session_id
+                  AND i.provider_driver_number = se.driver_number
+                  AND i.observed_at <= :target
+                ORDER BY i.observed_at DESC
+                LIMIT 1
+            ) iv ON true
+            LEFT JOIN LATERAL (
+                SELECT l.lap_number
+                FROM session_laps l
+                WHERE l.session_id = se.session_id
+                  AND l.provider_driver_number = se.driver_number
+                  AND l.started_at IS NOT NULL
+                  AND l.started_at <= :target
+                ORDER BY l.lap_number DESC
+                LIMIT 1
+            ) lap ON true
+            WHERE se.session_id = :session_id
+            ORDER BY pos.position NULLS LAST, se.driver_number
+            """
+        ),
+        {"session_id": session_id, "target": target},
+    )
+
+    series = []
+    for row in result.mappings().all():
+        gap = row["gap_to_leader_text"]
+        if row["position"] == 1:
+            gap = "LEADER"
+        elif gap is None and row["gap_to_leader_seconds"] is not None:
+            gap = float(row["gap_to_leader_seconds"])
+        interval = row["interval_text"]
+        if interval is None and row["interval_seconds"] is not None:
+            interval = float(row["interval_seconds"])
+        series.append(
+            {
+                "key": row["driver_key"] or f'car-{row["driver_number"]}',
+                "label": row["driver_label"] or f'Car {row["driver_number"]}',
+                "unit": "coordinate",
+                "driver_number": row["driver_number"],
+                "driver_acronym": row["driver_acronym"],
+                "classification_position": row["position"],
+                "team_key": row["team_key"],
+                "team_label": row["team_label"],
+                "color": normalize_team_color(row["team_color"]),
+                "points": [
+                    {
+                        "timestamp": row["observed_at"].isoformat(),
+                        "x": row["x"],
+                        "y": row["y"],
+                        "z": row["z"],
+                        "position": row["position"],
+                        "lap": row["lap_number"],
+                        "gap": gap,
+                        "gap_seconds": row["gap_to_leader_seconds"],
+                        "interval": interval,
+                        "interval_seconds": row["interval_seconds"],
+                    }
+                ],
+            }
+        )
+
+    if not series:
+        raise VisualizationNotFoundError(
+            f"no driver locations available near {target.isoformat()}"
+        )
+
+    reference_result = await session.execute(
+        text(
+            """
+            WITH reference_lap AS (
+                SELECT provider_driver_number,
+                       lap_number,
+                       started_at,
+                       lap_duration_seconds
+                FROM session_laps
+                WHERE session_id = :session_id
+                  AND started_at IS NOT NULL
+                  AND lap_duration_seconds IS NOT NULL
+                  AND is_pit_out_lap = false
+                ORDER BY lap_duration_seconds ASC
+                LIMIT 1
+            )
+            SELECT l.provider_driver_number,
+                   reference_lap.lap_number,
+                   l.observed_at,
+                   l.x,
+                   l.y,
+                   l.z
+            FROM reference_lap
+            JOIN session_locations l
+              ON l.session_id = :session_id
+             AND l.provider_driver_number =
+                 reference_lap.provider_driver_number
+             AND l.observed_at >= reference_lap.started_at
+             AND l.observed_at <= (
+                 reference_lap.started_at
+                 + reference_lap.lap_duration_seconds * interval '1 second'
+             )
+            ORDER BY l.observed_at
+            """
+        ),
+        {"session_id": session_id},
+    )
+    reference_rows = [dict(row) for row in reference_result.mappings().all()]
+    reference_path = [
+        {
+            "timestamp": row["observed_at"].isoformat(),
+            "x": row["x"],
+            "y": row["y"],
+            "z": row["z"],
+        }
+        for row in reference_rows
+    ]
+
+    metadata = {
+        "coordinate_system": "openf1_cartesian",
+        "origin": "provider_arbitrary",
+        "historical_sample_interval_ms": 1000,
+        "frame_at": target.isoformat(),
+        "bounds": bounds,
+        "reference_path_source": "derived_fastest_valid_lap",
+        "reference_driver_number": (
+            reference_rows[0]["provider_driver_number"]
+            if reference_rows
+            else None
+        ),
+        "reference_lap": (
+            reference_rows[0]["lap_number"] if reference_rows else None
+        ),
+        "reference_path": reference_path,
+        "limitations": [
+            "location is approximate and intended for progress around the circuit",
+            "lateral left/right placement is not reliable",
+            "reference path is derived from observed car locations, not official circuit geometry",
+        ],
+    }
+    return series, metadata
 
 
 async def _session_result_series(

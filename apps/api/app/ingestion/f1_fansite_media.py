@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 from app.ingestion.media_assets import infer_content_role
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
-_DERIVATIVE_SIZE_RE = re.compile(r"-(\\d{2,4})x(\\d{2,4})(?=\\.[a-z0-9]+$)", re.IGNORECASE)
+_DERIVATIVE_SIZE_RE = re.compile(r"-(\d{2,4})x(\d{2,4})(?=\.[a-z0-9]+$)", re.IGNORECASE)
 _LOW_VALUE_PATH_MARKERS = (
     "affiliate",
     "banner",

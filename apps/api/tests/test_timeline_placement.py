@@ -6,6 +6,9 @@ import pytest
 
 import app.timeline.placement as placement_module
 from app.timeline.placement import (
+    _select_story_race,
+    explicit_f1_season,
+    explicit_historical_event_year,
     explicit_season,
     infer_lap_number,
     infer_session_code,
@@ -145,9 +148,9 @@ async def test_timeline_metadata_uses_single_typed_json_bind(
             "created_at": reported_at,
         }
 
-    async def fake_story_race(session, requested_story_id):
+    async def fake_story_races(session, requested_story_id):
         assert requested_story_id == story_id
-        return None
+        return []
 
     monkeypatch.setattr(
         placement_module,
@@ -156,8 +159,8 @@ async def test_timeline_metadata_uses_single_typed_json_bind(
     )
     monkeypatch.setattr(
         placement_module,
-        "_story_race",
-        fake_story_race,
+        "_story_races",
+        fake_story_races,
     )
 
     session = _TimelineCaptureSession()
@@ -195,3 +198,177 @@ def test_calendar_sprint_count_is_not_a_sprint_session_cue() -> None:
     assert placement.precision == "season"
     assert placement.temporal_relation == "scheduled_for"
     assert placement.reason == "explicit_season_reference"
+
+
+
+def _race_candidate(
+    slug: str,
+    *,
+    season: int,
+    round_number: int,
+    anchor_at: datetime,
+    confidence: int,
+    matched_alias: str,
+) -> dict:
+    return {
+        "id": uuid4(),
+        "season": season,
+        "slug": slug,
+        "official_name": slug,
+        "round": round_number,
+        "anchor_at": anchor_at,
+        "relation_type": "context",
+        "confidence": confidence,
+        "matched_alias": matched_alias,
+    }
+
+
+def test_f1_season_parser_rejects_other_series_and_external_events() -> None:
+    assert (
+        explicit_f1_season("Slater to graduate from F3 to F2 for 2027")
+        is None
+    )
+    assert (
+        explicit_f1_season(
+            "The Human Engine Project submitted for consideration at SXSW 2027"
+        )
+        is None
+    )
+    assert (
+        explicit_f1_season(
+            "F1 clash avoided but can Norris race at Le Mans 2027?"
+        )
+        is None
+    )
+    assert explicit_f1_season("2027 Formula 1 race calendar confirmed") == 2027
+    assert explicit_f1_season("Ferrari switches focus to 2027 F1 car") == 2027
+
+
+def test_historical_event_year_detects_on_this_day_reference() -> None:
+    assert (
+        explicit_historical_event_year(
+            "On this day in 2016, Nico Rosberg won the Singapore GP"
+        )
+        == 2016
+    )
+
+
+def test_preview_prefers_next_race_over_previous_context() -> None:
+    reported = datetime(2026, 9, 10, 12, tzinfo=UTC)
+    monza = _race_candidate(
+        "2026-italian-grand-prix",
+        season=2026,
+        round_number=13,
+        anchor_at=datetime(2026, 9, 6, 13, tzinfo=UTC),
+        confidence=92,
+        matched_alias="Monza",
+    )
+    madrid = _race_candidate(
+        "2026-madrid-grand-prix",
+        season=2026,
+        round_number=14,
+        anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+        confidence=90,
+        matched_alias="Spanish Grand Prix",
+    )
+
+    selected = _select_story_race(
+        [monza, madrid],
+        text_value=(
+            "Expecting a Close-Fought Race in Madrid After Monza Success "
+            "– Toto’s Spanish GP Preview"
+        ),
+        reported_at=reported,
+    )
+
+    assert selected is not None
+    assert selected["slug"] == "2026-madrid-grand-prix"
+
+
+def test_historical_singapore_story_rejects_current_season_race() -> None:
+    selected = _select_story_race(
+        [
+            _race_candidate(
+                "2026-singapore-grand-prix",
+                season=2026,
+                round_number=17,
+                anchor_at=datetime(2026, 10, 11, 12, tzinfo=UTC),
+                confidence=100,
+                matched_alias="Singapore GP",
+            )
+        ],
+        text_value=(
+            "On this day in 2016, Nico Rosberg won the Singapore GP "
+            "after holding off a late charge"
+        ),
+        reported_at=datetime(2026, 9, 18, tzinfo=UTC),
+    )
+
+    assert selected is None
+
+
+@pytest.mark.parametrize(
+    ("title", "alias"),
+    [
+        (
+            "Norris completes first full test in McLaren’s Le Mans Hypercar",
+            "Spanish Grand Prix",
+        ),
+        (
+            "Ugochukwu beats Slater to win F3 title",
+            "Madring",
+        ),
+        (
+            "F2 adds extra Baku feature race and insists Qatar, Abu Dhabi still on",
+            "Baku",
+        ),
+    ],
+)
+def test_non_f1_event_stories_do_not_use_incidental_f1_race_context(
+    title: str,
+    alias: str,
+) -> None:
+    selected = _select_story_race(
+        [
+            _race_candidate(
+                "2026-madrid-grand-prix",
+                season=2026,
+                round_number=14,
+                anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+                confidence=90,
+                matched_alias=alias,
+            )
+        ],
+        text_value=title,
+        reported_at=datetime(2026, 9, 14, tzinfo=UTC),
+    )
+
+    assert selected is None
+
+
+def test_non_f1_future_year_falls_back_to_report_timeline() -> None:
+    placement = infer_story_coordinate(
+        text_value="Slater to graduate from F3 to F2 for 2027",
+        taxonomy="general",
+        reported_at=datetime(2026, 9, 15, tzinfo=UTC),
+        race_season=None,
+        race_anchor_at=None,
+    )
+
+    assert placement.season == 2026
+    assert placement.precision == "timestamp"
+    assert placement.temporal_relation == "reported_at"
+
+
+def test_f1_future_season_still_maps_to_scheduled_season() -> None:
+    placement = infer_story_coordinate(
+        text_value="2027 Formula 1 race calendar confirmed",
+        taxonomy="sporting",
+        reported_at=datetime(2026, 9, 16, tzinfo=UTC),
+        race_season=None,
+        race_anchor_at=None,
+    )
+
+    assert placement.season == 2027
+    assert placement.precision == "season"
+    assert placement.temporal_relation == "scheduled_for"

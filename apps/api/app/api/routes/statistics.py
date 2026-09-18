@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,10 +12,11 @@ from app.schemas.statistics import (
 from app.statistics.service import StatisticsNotFoundError, driver_modern_race_metrics, driver_statistics
 
 router = APIRouter(prefix="/api/v1/statistics", tags=["statistics"])
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("/drivers/{driver_key}", response_model=DriverCareerStatisticsResponse)
-async def career(driver_key: str, db: AsyncSession = Depends(get_db)):
+async def career(driver_key: str, db: DbSession):
     try:
         return await driver_statistics(db, driver_key)
     except StatisticsNotFoundError as exc:
@@ -21,7 +24,7 @@ async def career(driver_key: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/drivers/{driver_key}/seasons/{season}", response_model=DriverSeasonStatisticsResponse)
-async def season(driver_key: str, season: int, db: AsyncSession = Depends(get_db)):
+async def season(driver_key: str, season: int, db: DbSession):
     try:
         return await driver_statistics(db, driver_key, season)
     except StatisticsNotFoundError as exc:
@@ -32,8 +35,8 @@ async def season(driver_key: str, season: int, db: AsyncSession = Depends(get_db
 async def modern_race(
     driver_key: str,
     race_key: str,
-    session_code: str = Query(default="race"),
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
+    session_code: Annotated[str, Query()] = "race",
 ):
     try:
         return await driver_modern_race_metrics(db, driver_key, race_key, session_code)

@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ChartType = Literal["line", "timeline", "bar", "event_stream", "timing_table", "multi_panel"]
+ChartType = Literal["line", "timeline", "bar", "event_stream", "timing_table", "multi_panel", "spatial_map"]
 AxisDirection = Literal["normal", "reversed"]
 RenderPreset = Literal[
     "position-trace",
@@ -23,6 +23,7 @@ RenderPreset = Literal[
     "mini-sector-timing",
     "timing-tower",
     "session-classification",
+    "driver-tracker",
 ]
 
 
@@ -97,4 +98,5 @@ class VisualizationResponse(BaseModel):
     presentation: VisualizationPresentation
     series: list[VisualizationSeries]
     annotations: list[VisualizationAnnotation] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     provenance: list[VisualizationProvenance] = Field(default_factory=list)

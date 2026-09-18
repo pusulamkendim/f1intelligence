@@ -110,7 +110,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS media_assets_provider_asset_id_uq
     ON media_assets(source_provider, source_asset_id)
     WHERE source_asset_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS media_assets_origin_asset_id_uq
+CREATE INDEX IF NOT EXISTS media_assets_origin_asset_id_idx
     ON media_assets(origin_provider, origin_asset_id)
     WHERE origin_provider IS NOT NULL
       AND origin_asset_id IS NOT NULL;

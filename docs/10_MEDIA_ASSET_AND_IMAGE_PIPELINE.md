@@ -1054,3 +1054,24 @@ Primary references at the time this document was created:
 - Wikimedia Commons — technical reuse guidance: `https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia/technical`
 
 These references are operational guidance, not a substitute for legal advice. For unclear high-value or commercial uses, obtain qualified legal review rather than weakening the pipeline's validation rules.
+
+
+---
+
+# 24. 2026 implementation delta: story-first media registry
+
+The current implementation adds a pre-approval discovery layer before the older approval/download workflow.
+
+Key decisions:
+
+- Source articles retain JSON-LD/Open Graph/RSS image URLs as metadata during normal ingestion.
+- Story materialization converts those references into persistent `media_assets` plus non-selected `story_media_candidates`.
+- Race storytelling roles are first-class: `race_hero`, `podium`, `winner`, `race_start`, `overtake`, `incident`, `pit_stop`, `strategy`, `driver_action`, `team_action`, `technical_detail`, `celebration`, and `reaction`.
+- F1-Fansite is used only as a discovery/index source. Its image URLs, captions, photographer/agency metadata and origin-provider IDs may be retained, but the binary is not approved for local storage by discovery alone.
+- Formula1.com and OpenF1 headshot URLs are reference/discovery inputs, not evidence of image reuse rights.
+- Team media centres, Red Bull Content Pool, Audi MediaCenter, Wikimedia Commons and licensed agencies remain origin/licence-resolution sources subject to asset-level terms.
+- Discovery records can exist with `storage_policy=metadata_only`; publication and storage approval remain separate gates.
+- Cloudflare R2 is the planned object-storage backend, but this phase performs no binary upload. R2 fields/config/object-key conventions are reserved so storage can be enabled later without changing the canonical media model.
+- Story API responses expose candidate URLs and rights/storage state so editorial/UI policy can become stricter later without losing discovered imagery.
+
+The implemented schema is intentionally smaller than the full conceptual model above. Future approval/download work should extend it with immutable rights snapshots, variants and usage records rather than bypassing the registry.

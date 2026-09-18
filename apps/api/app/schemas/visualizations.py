@@ -2,13 +2,47 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ChartType = Literal["line", "timeline"]
+ChartType = Literal["line", "timeline", "bar", "event_stream", "timing_table"]
+AxisDirection = Literal["normal", "reversed"]
+RenderPreset = Literal[
+    "position-trace",
+    "lap-times",
+    "stint-strategy",
+    "sector-timing",
+    "speed-comparison",
+    "gap-interval",
+    "pit-stop",
+    "weather",
+    "overtakes",
+    "starting-grid",
+]
+
+
+class VisualizationAxis(BaseModel):
+    key: str
+    label: str
+    unit: str | None = None
+    direction: AxisDirection = "normal"
+    min: float | None = None
+    max: float | None = None
+    formatter: str | None = None
+
+
+class VisualizationPresentation(BaseModel):
+    preset: RenderPreset
+    dense: bool = True
+    dark_preferred: bool = True
+    show_legend: bool = True
+    show_annotations: bool = True
+    semantic_tokens: dict[str, str] = Field(default_factory=dict)
 
 
 class VisualizationSeries(BaseModel):
     key: str
     label: str
     unit: str | None = None
+    driver_number: int | None = None
+    driver_acronym: str | None = None
     team_key: str | None = None
     team_label: str | None = None
     color: str | None = None
@@ -21,6 +55,7 @@ class VisualizationAnnotation(BaseModel):
     label: str
     lap: int | None = None
     occurred_at: str | None = None
+    semantic_token: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -35,8 +70,9 @@ class VisualizationResponse(BaseModel):
     key: str
     chart_type: ChartType
     title: str
-    x_axis: str
-    y_axis: str
+    x_axis: VisualizationAxis
+    y_axis: VisualizationAxis
+    presentation: VisualizationPresentation
     series: list[VisualizationSeries]
     annotations: list[VisualizationAnnotation] = Field(default_factory=list)
     provenance: list[VisualizationProvenance] = Field(default_factory=list)

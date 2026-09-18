@@ -144,6 +144,20 @@ def parse_feed(xml_text: str, source: EditorialSource) -> list[EditorialItem]:
         ]
         categories = [value for value in categories if value]
         canonical_url = link.split("?", 1)[0].rstrip("/")
+        image_url = None
+        for child in node:
+            if _local_name(child.tag) not in {"content", "thumbnail", "enclosure"}:
+                continue
+            candidate = child.attrib.get("url") or child.attrib.get("href")
+            media_type = child.attrib.get("type", "")
+            if candidate and (
+                media_type.startswith("image/")
+                or candidate.lower().split("?", 1)[0].endswith(
+                    (".jpg", ".jpeg", ".png", ".webp", ".avif")
+                )
+            ):
+                image_url = urljoin(canonical_url, candidate)
+                break
 
         items.append(
             EditorialItem(
@@ -159,6 +173,8 @@ def parse_feed(xml_text: str, source: EditorialSource) -> list[EditorialItem]:
                     "categories": categories,
                     "feed_url": source.discovery_url,
                     "team_slug": source.team_slug,
+                    "image_url": image_url,
+                    "image_source": "feed_media" if image_url else None,
                 },
             )
         )
@@ -296,6 +312,28 @@ def _article_node(documents: list[Any]) -> dict[str, Any]:
     return {}
 
 
+
+def _image_value(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("url", "contentUrl", "thumbnailUrl"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    if isinstance(value, list):
+        for item in value:
+            candidate = _image_value(item)
+            if candidate:
+                return candidate
+    return None
+
+
+def _absolute_image_url(value: str | None, base_url: str) -> str | None:
+    if not value:
+        return None
+    return urljoin(base_url, value)
+
 def _author_name(value: Any) -> str | None:
     if isinstance(value, str):
         return _clean_text(value, limit=300)
@@ -341,6 +379,20 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
     if not isinstance(section, str):
         section = None
 
+    json_image = _image_value(node.get("image"))
+    open_graph_image = parser.meta.get("og:image") or parser.meta.get("twitter:image")
+    image_url = _absolute_image_url(
+        json_image or open_graph_image,
+        canonical_url,
+    )
+    image_source = (
+        "json_ld"
+        if json_image
+        else "open_graph"
+        if open_graph_image
+        else None
+    )
+
     return EditorialItem(
         external_id=_stable_external_id(source.provider, canonical_url),
         canonical_url=canonical_url,
@@ -356,6 +408,8 @@ def parse_article_html(html_text: str, *, requested_url: str, source: EditorialS
             "article_section": section,
             "team_slug": source.team_slug,
             "og_type": parser.meta.get("og:type"),
+            "image_url": image_url,
+            "image_source": image_source,
             "title_fallback": (
                 "document_title"
                 if title == parser.document_title

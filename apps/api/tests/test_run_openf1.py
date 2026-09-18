@@ -1,8 +1,11 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.ingestion.openf1 import OpenF1Session
 from app.ingestion.run_openf1 import (
     _bounded_candidates,
+    _fetch_context_rows,
     _grid_sessions,
     _location_candidates,
     _result_candidates,
@@ -86,3 +89,32 @@ def test_starting_grid_candidates_only_use_main_race_sessions() -> None:
     )
 
     assert [row.session_key for row in _grid_sessions([sprint, race])] == [1]
+
+
+
+@pytest.mark.asyncio
+async def test_context_fetches_use_optional_openf1_datasets() -> None:
+    calls: list[tuple[str, int]] = []
+
+    class FakeClient:
+        async def _get_optional(self, endpoint: str, **params):
+            calls.append((endpoint, params["session_key"]))
+            return []
+
+        async def _get(self, endpoint: str, **params):
+            raise AssertionError(
+                f"strict OpenF1 call used for optional context: {endpoint}"
+            )
+
+    rows = await _fetch_context_rows(
+        FakeClient(),  # type: ignore[arg-type]
+        11234,
+    )
+
+    assert rows == ([], [], [], [])
+    assert calls == [
+        ("race_control", 11234),
+        ("intervals", 11234),
+        ("pit", 11234),
+        ("weather", 11234),
+    ]

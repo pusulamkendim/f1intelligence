@@ -2,11 +2,11 @@ from uuid import uuid4
 
 import pytest
 
+from app.ingestion.media_source_registry import policy_for_provider
 from app.ingestion.run_driver_media import (
     GROUP_PHOTOS,
     load_grid_driver_portraits,
 )
-from app.ingestion.media_source_registry import policy_for_provider
 
 
 class _Mappings:

@@ -179,6 +179,8 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
         ):
             locations = await client.locations(
                 item.session_key,
+                date_start=item.date_start,
+                date_end=item.date_end,
                 sample_interval_ms=1000,
             )
             async with SessionLocal() as db:

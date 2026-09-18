@@ -111,7 +111,7 @@ ranked AS (
         expanded.*,
         CASE
             WHEN duration_seconds IS NULL THEN NULL
-            ELSE rank() OVER (
+            ELSE dense_rank() OVER (
                 PARTITION BY segment_id
                 ORDER BY duration_seconds ASC NULLS LAST
             )::integer

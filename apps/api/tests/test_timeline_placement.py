@@ -545,3 +545,52 @@ def test_fp1_summary_can_resolve_generic_practice_recap_to_practice_one() -> Non
     assert placement.session_code == "practice_1"
     assert placement.precision == "session"
     assert placement.temporal_relation == "occurred_at"
+
+
+
+def test_fia_event_name_is_first_class_race_alias() -> None:
+    madrid = _race_candidate(
+        "2026-madrid-grand-prix",
+        season=2026,
+        round_number=14,
+        anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+        confidence=99,
+        matched_alias="Spanish Grand Prix",
+        alias_type="fia_event_name",
+        detected_in=("standfirst",),
+    )
+
+    selected = _select_story_race(
+        [madrid],
+        text_value=(
+            "Frantic Qualifying in Madrid "
+            "Kimi Antonelli qualified second for Sunday's Spanish Grand Prix."
+        ),
+        title_value="Frantic Qualifying in Madrid",
+        reported_at=datetime(2026, 9, 12, tzinfo=UTC),
+    )
+
+    assert selected is not None
+    assert selected["slug"] == "2026-madrid-grand-prix"
+
+
+def test_known_non_event_alias_does_not_use_lexical_fallback() -> None:
+    candidate = _race_candidate(
+        "2026-madrid-grand-prix",
+        season=2026,
+        round_number=14,
+        anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+        confidence=90,
+        matched_alias="Spanish GP",
+        alias_type="topic",
+        detected_in=("standfirst",),
+    )
+
+    selected = _select_story_race(
+        [candidate],
+        text_value="A generic story. Spanish GP was mentioned in passing.",
+        title_value="A generic story",
+        reported_at=datetime(2026, 9, 12, tzinfo=UTC),
+    )
+
+    assert selected is None

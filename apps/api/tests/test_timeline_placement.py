@@ -500,3 +500,48 @@ def test_race_name_in_standfirst_remains_eligible_context() -> None:
 
     assert selected is not None
     assert selected["slug"] == "2026-azerbaijan-grand-prix"
+
+
+
+def test_unknown_alias_type_with_grand_prix_standfirst_can_anchor_race() -> None:
+    madrid = _race_candidate(
+        "2026-madrid-grand-prix",
+        season=2026,
+        round_number=14,
+        anchor_at=datetime(2026, 9, 13, 13, tzinfo=UTC),
+        confidence=90,
+        matched_alias="Spanish Grand Prix",
+        alias_type="unknown",
+        detected_in=("standfirst",),
+    )
+
+    selected = _select_story_race(
+        [madrid],
+        text_value=(
+            "Frantic Qualifying in Madrid "
+            "Kimi Antonelli qualified second with team-mate George Russell sixth "
+            "for Sunday's Spanish Grand Prix."
+        ),
+        title_value="Frantic Qualifying in Madrid",
+        reported_at=datetime(2026, 9, 12, tzinfo=UTC),
+    )
+
+    assert selected is not None
+    assert selected["slug"] == "2026-madrid-grand-prix"
+
+
+def test_fp1_summary_can_resolve_generic_practice_recap_to_practice_one() -> None:
+    placement = infer_story_coordinate(
+        text_value=(
+            "Spanish Grand Prix: Practice Recap "
+            "The team completed its opening FP1 running."
+        ),
+        taxonomy="sporting",
+        reported_at=datetime(2025, 6, 1, tzinfo=UTC),
+        race_season=2025,
+        race_anchor_at=datetime(2025, 6, 1, 13, tzinfo=UTC),
+    )
+
+    assert placement.session_code == "practice_1"
+    assert placement.precision == "session"
+    assert placement.temporal_relation == "occurred_at"

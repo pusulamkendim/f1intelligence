@@ -121,6 +121,37 @@ def _grid_sessions(sessions: list[OpenF1Session]) -> list[OpenF1Session]:
     return [item for item in sessions if item.session_code == "race"]
 
 
+async def _fetch_context_rows(
+    client: OpenF1Client,
+    session_key: int,
+):
+    race_control = parse_race_control(
+        await client._get_optional(
+            "race_control",
+            session_key=session_key,
+        )
+    )
+    intervals = parse_intervals(
+        await client._get_optional(
+            "intervals",
+            session_key=session_key,
+        )
+    )
+    pits = parse_pit_stops(
+        await client._get_optional(
+            "pit",
+            session_key=session_key,
+        )
+    )
+    weather = parse_weather(
+        await client._get_optional(
+            "weather",
+            session_key=session_key,
+        )
+    )
+    return race_control, intervals, pits, weather
+
+
 async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, object]:
     settings = get_settings()
     headers = {"User-Agent": settings.source_user_agent, "Accept": "application/json"}
@@ -292,10 +323,12 @@ async def sync_openf1(season: int, *, telemetry_limit: int = 2) -> dict[str, obj
 
         context_summary: list[dict[str, int]] = []
         for item in _bounded_candidates(matched_sessions, context_cached, limit=telemetry_limit):
-            race_control = parse_race_control(await client._get("race_control", session_key=item.session_key))
-            intervals = parse_intervals(await client._get("intervals", session_key=item.session_key))
-            pits = parse_pit_stops(await client._get("pit", session_key=item.session_key))
-            weather = parse_weather(await client._get("weather", session_key=item.session_key))
+            race_control, intervals, pits, weather = (
+                await _fetch_context_rows(
+                    client,
+                    item.session_key,
+                )
+            )
             async with SessionLocal() as db:
                 async with db.begin():
                     driver_map = await driver_entity_map(db, session_ids[item.session_key])

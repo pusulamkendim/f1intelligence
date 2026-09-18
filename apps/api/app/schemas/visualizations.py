@@ -15,6 +15,8 @@ RenderPreset = Literal[
     "weather",
     "overtakes",
     "starting-grid",
+    "championship-standings",
+    "driver-season-results",
 ]
 
 
@@ -28,12 +30,22 @@ class VisualizationAxis(BaseModel):
     formatter: str | None = None
 
 
+class VisualizationColumn(BaseModel):
+    key: str
+    label: str
+    formatter: str | None = None
+    align: Literal["left", "center", "right"] = "right"
+    status_key: str | None = None
+
+
 class VisualizationPresentation(BaseModel):
     preset: RenderPreset
     dense: bool = True
     dark_preferred: bool = True
+    driver_label_mode: Literal["acronym", "full"] = "acronym"
     show_legend: bool = True
     show_annotations: bool = True
+    columns: list[VisualizationColumn] = Field(default_factory=list)
     semantic_tokens: dict[str, str] = Field(default_factory=dict)
 
 

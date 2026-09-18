@@ -151,6 +151,22 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+
+def _image_value(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("url", "contentUrl", "thumbnailUrl"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    if isinstance(value, list):
+        for item in value:
+            candidate = _image_value(item)
+            if candidate:
+                return candidate
+    return None
+
 def _author_name(value: Any) -> str | None:
     if isinstance(value, str):
         return value.strip() or None
@@ -237,6 +253,10 @@ def parse_formula1_article(html_text: str, *, requested_url: str) -> Formula1Art
 
     author = _author_name(article_node.get("author")) or parser.meta.get("author")
     language = parser.html_lang or "en"
+    json_image = _image_value(article_node.get("image"))
+    open_graph_image = parser.meta.get("og:image") or parser.meta.get("twitter:image")
+    image_url = urljoin(canonical_url, json_image or open_graph_image) if (json_image or open_graph_image) else None
+    image_source = "json_ld" if json_image else "open_graph" if open_graph_image else None
 
     return Formula1Article(
         external_id=_external_id(canonical_url),
@@ -252,5 +272,7 @@ def parse_formula1_article(html_text: str, *, requested_url: str) -> Formula1Art
             "article_section": section,
             "og_type": parser.meta.get("og:type"),
             "source": "formula1.com",
+            "image_url": image_url,
+            "image_source": image_source,
         },
     )
